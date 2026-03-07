@@ -80,7 +80,6 @@ export default function App() {
               <button className="primary-btn" onClick={() => setView('auth')}>
                 Get Started
               </button>
-              <button className="ghost-btn">View Demo Flow</button>
             </div>
           </section>
         </div>
