@@ -216,6 +216,34 @@ button {
   margin-bottom: 0.4rem;
 }
 
+.info-section {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: var(--card);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 20px;
+  backdrop-filter: blur(8px);
+}
+
+.info-section h3 {
+  margin-top: 0.35rem;
+}
+
+.info-section p {
+  margin: 0.7rem 0;
+  color: var(--ink);
+}
+
+.info-section ul {
+  margin: 0.8rem 0;
+  padding-left: 1rem;
+  color: var(--ink);
+}
+
+.info-section li {
+  margin-bottom: 0.6rem;
+}
+
 @media (max-width: 900px) {
   .hero-grid,
   .panel-grid {

@@ -7,15 +7,6 @@ const heroContent = {
     'Match by coursework and shared deadlines, train with an AI mentor, and earn smart-score points you can spend on cosmetics.'
 };
 
-const roadmap = [
-  'Design wireframe in Figma',
-  'Build basic frontend',
-  'Add UTD Blackboard authentication',
-  'Connect MongoDB + matching backend',
-  'Finish frontend with backend context',
-  'Ship rewards, cosmetics, and polish'
-];
-
 export default function App() {
   const [view, setView] = useState('home');
   const [authMode, setAuthMode] = useState('login');
@@ -123,14 +114,18 @@ export default function App() {
           </article>
         </section>
 
-        <section className="roadmap">
-          <p className="eyebrow">Build Plan</p>
-          <h3>Execution roadmap</h3>
-          <ol>
-            {roadmap.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ol>
+        <section className="info-section">
+          <p className="eyebrow">Why PearedUp?</p>
+          <h3>Transform your study experience</h3>
+          <p>
+            PearedUp goes beyond traditional study groups by intelligently matching you with peers who share your academic goals and challenges. Our AI-powered platform ensures you're not just studying with anyone—you're studying with the right people at the right time.
+          </p>
+          <ul>
+            <li><strong>Personalized Matching:</strong> Upload your syllabus and get connected with classmates taking the same courses, facing similar deadlines, and learning at your pace.</li>
+            <li><strong>AI-Powered Support:</strong> Get instant help from our integrated AI mentor that adapts to your learning style and provides tailored study plans.</li>
+            <li><strong>Gamified Learning:</strong> Turn studying into an engaging experience with smart-score points, unlockable cosmetics, and achievement badges.</li>
+            <li><strong>Secure & Private:</strong> Built with student privacy in mind, using university authentication to keep your academic data safe.</li>
+          </ul>
         </section>
       </main>
     </div>
