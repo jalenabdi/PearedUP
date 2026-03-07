@@ -119,6 +119,11 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .primary-btn {
   background: linear-gradient(90deg, var(--accent), var(--accent-2));
   color: #1b1204;
@@ -318,6 +323,27 @@ button {
   flex-direction: column;
   gap: 0.75rem;
   margin-top: 1rem;
+}
+
+.verification-msg {
+  margin-top: 0.1rem;
+  font-size: 0.9rem;
+  text-align: left;
+}
+
+.verification-msg.success {
+  color: #6bd3b0;
+}
+
+.verification-msg.warning {
+  color: #ffcd6f;
+}
+
+.auth-msg {
+  margin-top: 0.1rem;
+  font-size: 0.9rem;
+  text-align: left;
+  color: var(--mint);
 }
 
 .auth-actions .ghost-btn {
