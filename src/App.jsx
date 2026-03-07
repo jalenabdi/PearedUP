@@ -74,7 +74,7 @@ export default function App() {
           <div className="brand">
             <img src={logo} alt="PearedUp logo" className="logo-img" />
             <div>
-              <p className="eyebrow">Nebula Labs Presents</p>
+              <p className="eyebrow"></p>
               <h1>PearedUp</h1>
             </div>
           </div>
