@@ -225,6 +225,10 @@ button {
   backdrop-filter: blur(8px);
 }
 
+.info-section .eyebrow {
+  color: var(--mint);
+}
+
 .info-section h3 {
   margin-top: 0.35rem;
 }
