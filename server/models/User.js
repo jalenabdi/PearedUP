@@ -24,6 +24,11 @@ const userSchema = new mongoose.Schema(
     verificationExpiresAt: {
       type: Date,
       default: undefined
+    },
+    userType: {
+      type: String,
+      enum: ['student', 'non-student'],
+      default: undefined
     }
   },
   { timestamps: true }

@@ -6,6 +6,7 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import nodemailer from 'nodemailer';
 import rateLimit from 'express-rate-limit';
+import jwt from 'jsonwebtoken';
 import User from './models/User.js';
 
 dotenv.config();
@@ -15,6 +16,7 @@ const PORT = Number(process.env.PORT || 4000);
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/pearedup';
 const VERIFICATION_TTL_MINUTES = Number(process.env.VERIFICATION_TTL_MINUTES || 15);
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
 app.use(cors({ origin: CLIENT_ORIGIN }));
 app.use(express.json());
@@ -27,6 +29,18 @@ const authLimiter = rateLimit({
 });
 
 app.use('/api/auth', authLimiter);
+
+const authenticate = (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ message: 'No token provided' });
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.userId = decoded.userId;
+    next();
+  } catch {
+    res.status(401).json({ message: 'Invalid token' });
+  }
+};
 
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 const hashCode = (code) => crypto.createHash('sha256').update(code).digest('hex');
@@ -192,9 +206,37 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password.' });
     }
 
-    return res.json({ message: 'Login successful.' });
+    const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
+
+    return res.json({ message: 'Login successful.', token, userType: user.userType });
   } catch {
     return res.status(500).json({ message: 'Failed to log in.' });
+  }
+});
+
+app.post('/api/auth/set-user-type', authenticate, async (req, res) => {
+  try {
+    const userType = req.body.userType;
+    if (!['student', 'non-student'].includes(userType)) {
+      return res.status(400).json({ message: 'Invalid user type' });
+    }
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    user.userType = userType;
+    await user.save();
+    return res.json({ message: 'User type set successfully' });
+  } catch {
+    return res.status(500).json({ message: 'Failed to set user type' });
+  }
+});
+
+app.get('/api/auth/me', authenticate, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId).select('email userType');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    return res.json({ user });
+  } catch {
+    return res.status(500).json({ message: 'Failed to get user' });
   }
 });
 

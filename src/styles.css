@@ -318,6 +318,31 @@ button:disabled {
   box-shadow: 0 0 0 2px rgba(255, 205, 111, 0.2);
 }
 
+.message {
+  margin: 1rem 0;
+  padding: 0.5rem;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.message.success {
+  background: rgba(107, 211, 176, 0.1);
+  color: var(--mint);
+  border: 1px solid var(--mint);
+}
+
+.message.warning {
+  background: rgba(255, 205, 111, 0.1);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+.message.error {
+  background: rgba(255, 100, 48, 0.1);
+  color: var(--accent-2);
+  border: 1px solid var(--accent-2);
+}
+
 .auth-actions {
   display: flex;
   flex-direction: column;

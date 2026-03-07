@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import logo from '../PearedUP-logo.png';
 
 const heroContent = {
@@ -7,10 +7,10 @@ const heroContent = {
     'Match by coursework and shared deadlines, train with an AI mentor, and earn smart-score points you can spend on cosmetics.'
 };
 
-async function postJson(url, payload) {
+async function postJson(url, payload, headers = {}) {
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(payload)
   });
 
@@ -25,16 +25,38 @@ async function postJson(url, payload) {
 export default function App() {
   const [view, setView] = useState('home');
   const [authMode, setAuthMode] = useState('login');
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(localStorage.getItem('token') || null);
+  const [signupStep, setSignupStep] = useState(1);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [enteredCode, setEnteredCode] = useState('');
-  const [emailVerified, setEmailVerified] = useState(false);
-  const [verificationMessage, setVerificationMessage] = useState('');
-  const [authMessage, setAuthMessage] = useState('');
-  const [isSendingCode, setIsSendingCode] = useState(false);
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    if (token) {
+      // Check if user is logged in
+      fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.user) {
+            setUser(data.user);
+            if (!data.user.userType) {
+              setView('user-type');
+            } else {
+              setView('dashboard'); // or main app
+            }
+          }
+        })
+        .catch(() => {
+          localStorage.removeItem('token');
+          setToken(null);
+        });
+    }
+  }, [token]);
 
   const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
@@ -45,77 +67,68 @@ export default function App() {
 
   const sendVerificationCode = async () => {
     if (!isValidEmail(email)) {
-      setVerificationMessage('Enter a valid email first so we can verify it.');
+      setMessage('Enter a valid email first so we can verify it.');
       return;
     }
 
-    setIsSendingCode(true);
-    setVerificationMessage('');
+    setMessage('');
 
     try {
       const data = await postJson('/api/auth/request-verification', { email: email.trim().toLowerCase() });
-      setEmailVerified(false);
-      setVerificationMessage(data.message || 'Verification code sent.');
+      setSignupStep(2);
+      setMessage(data.message || 'Verification code sent.');
     } catch (error) {
-      setVerificationMessage(error.message);
-    } finally {
-      setIsSendingCode(false);
+      setMessage(error.message);
     }
   };
 
   const handleVerifyCode = async () => {
-    if (!enteredCode.trim()) {
-      setVerificationMessage('Enter the verification code.');
+    if (!verificationCode.trim()) {
+      setMessage('Enter the verification code.');
       return;
     }
 
-    setIsVerifying(true);
-    setVerificationMessage('');
+    setMessage('');
 
     try {
       const data = await postJson('/api/auth/verify-email', {
         email: email.trim().toLowerCase(),
-        code: enteredCode.trim()
+        code: verificationCode.trim()
       });
-      setEmailVerified(true);
-      setVerificationMessage(data.message || 'Email verified successfully.');
+      setSignupStep(3);
+      setMessage(data.message || 'Email verified successfully.');
     } catch (error) {
-      setEmailVerified(false);
-      setVerificationMessage(error.message);
-    } finally {
-      setIsVerifying(false);
+      setMessage(error.message);
     }
   };
 
   const handleAuthSubmit = async () => {
-    resetAuthFeedback();
-
     if (!isValidEmail(email)) {
-      setAuthMessage('Please enter a valid email.');
+      setMessage('Please enter a valid email.');
       return;
     }
 
     if (!password) {
-      setAuthMessage('Please enter your password.');
+      setMessage('Please enter your password.');
       return;
     }
 
     if (authMode === 'signup') {
       if (password.length < 8) {
-        setAuthMessage('Password must be at least 8 characters.');
+        setMessage('Password must be at least 8 characters.');
         return;
       }
       if (password !== confirmPassword) {
-        setAuthMessage('Passwords do not match.');
+        setMessage('Passwords do not match.');
         return;
       }
-      if (!emailVerified) {
-        setAuthMessage('Verify your email before creating an account.');
+      if (signupStep < 3) {
+        setMessage('Complete email verification first.');
         return;
       }
     }
 
-    setIsSubmitting(true);
+    setMessage('');
 
     try {
       const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/signup';
@@ -123,106 +136,127 @@ export default function App() {
         email: email.trim().toLowerCase(),
         password
       });
-      setAuthMessage(data.message || (authMode === 'login' ? 'Login successful.' : 'Account created.'));
-    } catch (error) {
-      setAuthMessage(error.message);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const toggleAuthMode = () => {
-    const nextMode = authMode === 'login' ? 'signup' : 'login';
-    setAuthMode(nextMode);
-    setPassword('');
-    setConfirmPassword('');
-    setEnteredCode('');
-    setEmailVerified(false);
-    resetAuthFeedback();
-
-    if (nextMode === 'signup') {
-      if (isValidEmail(email)) {
-        sendVerificationCode();
-      } else {
-        setVerificationMessage('Enter your email, then click Send Code to verify before signup.');
+      setMessage(data.message || (authMode === 'login' ? 'Login successful.' : 'Account created.'));
+      if (authMode === 'login' && data.token) {
+        localStorage.setItem('token', data.token);
+        setToken(data.token);
+        setUser({ email, userType: data.userType });
+        if (!data.userType) {
+          setView('user-type');
+        } else {
+          setView('dashboard');
+        }
+      } else if (authMode === 'signup') {
+        setAuthMode('login');
+        setSignupStep(1);
       }
+    } catch (error) {
+      setMessage(error.message);
     }
   };
+
+  const handleSetUserType = async (type) => {
+    try {
+      const data = await postJson('/api/auth/set-user-type', { userType: type }, { Authorization: `Bearer ${token}` });
+      setUser({ ...user, userType: type });
+      setView('dashboard');
+    } catch (error) {
+      setMessage(error.message);
+    }
+  };
+
+  if (view === 'user-type') {
+    return (
+      <div className="page-shell">
+        <main className="auth-page">
+          <section className="panel auth-card">
+            <p className="eyebrow">Welcome!</p>
+            <h2>Are you a student or non-student?</h2>
+            <p className="muted">This helps us personalize your experience.</p>
+            <div className="cta-row">
+              <button className="primary-btn" onClick={() => handleSetUserType('student')}>
+                Student
+              </button>
+              <button className="ghost-btn" onClick={() => handleSetUserType('non-student')}>
+                Non-Student
+              </button>
+            </div>
+          </section>
+        </main>
+      </div>
+    );
+  }
+
+  if (view === 'dashboard') {
+    return (
+      <div className="page-shell">
+        <main>
+          <h1>Welcome to PearedUp, {user?.email}!</h1>
+          <p>You are a {user?.userType}.</p>
+          <button onClick={() => { localStorage.removeItem('token'); setToken(null); setUser(null); setView('home'); }}>Logout</button>
+        </main>
+      </div>
+    );
+  }
 
   if (view === 'auth') {
     return (
       <div className="page-shell auth-shell">
         <main className="auth-page">
           <section className="panel auth-card">
-            <p className="eyebrow">{authMode === 'login' ? 'Welcome Back' : 'Create Account'}</p>
-            <h2>{authMode === 'login' ? 'Log in to PearedUp' : 'Create your PearedUp account'}</h2>
+            <p className="eyebrow">{authMode === 'login' ? 'Welcome Back' : signupStep === 1 ? 'Create Account' : signupStep === 2 ? 'Verify Email' : 'Set Password'}</p>
+            <h2>{authMode === 'login' ? 'Log in to PearedUp' : signupStep === 1 ? 'Enter your email' : signupStep === 2 ? 'Enter verification code' : 'Create password'}</h2>
             <p className="muted">
               {authMode === 'login'
                 ? 'Continue your study groups, mentoring sessions, and smart-score progress.'
-                : 'Join your classmates and peers, find your learning matches, and start earning smart-score points.'}
+                : signupStep === 1
+                ? 'We\'ll send a verification code to your email.'
+                : signupStep === 2
+                ? 'Check your email for the 6-digit code.'
+                : 'Choose a strong password for your account.'}
             </p>
 
-            <form className="auth-form" onSubmit={(event) => event.preventDefault()}>
-              <label htmlFor="email">Email</label>
-              <input
-                id="email"
-                type="email"
-                placeholder="you@school.edu"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-              <label htmlFor="password">Password</label>
-              <input
-                id="password"
-                type="password"
-                placeholder="Enter password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-              {authMode === 'signup' && (
-                <>
-                  <label htmlFor="confirmPassword">Confirm Password</label>
-                  <input
-                    id="confirmPassword"
-                    type="password"
-                    placeholder="Confirm password"
-                    value={confirmPassword}
-                    onChange={(event) => setConfirmPassword(event.target.value)}
-                  />
-                  <button type="button" className="ghost-btn" onClick={sendVerificationCode} disabled={isSendingCode}>
-                    {isSendingCode ? 'Sending...' : 'Send Code'}
-                  </button>
-                  <label htmlFor="verificationCode">Verification Code</label>
-                  <input
-                    id="verificationCode"
-                    type="text"
-                    placeholder="Enter 6-digit code"
-                    value={enteredCode}
-                    onChange={(event) => setEnteredCode(event.target.value)}
-                  />
-                  <button type="button" className="ghost-btn" onClick={handleVerifyCode} disabled={isVerifying}>
-                    {isVerifying ? 'Verifying...' : 'Verify Email'}
-                  </button>
-                  {verificationMessage && (
-                    <p className={`verification-msg ${emailVerified ? 'success' : 'warning'}`}>
-                      {verificationMessage}
-                    </p>
+            {message && <p className="message">{message}</p>}
+
+            <form className="auth-form" onSubmit={(e) => e.preventDefault()}>
+              {signupStep === 1 || authMode === 'login' ? (
+                <div>
+                  <label htmlFor="email">Email</label>
+                  <input id="email" type="email" placeholder="you@school.edu" value={email} onChange={(e) => setEmail(e.target.value)} />
+                </div>
+              ) : null}
+
+              {signupStep === 2 ? (
+                <div>
+                  <label htmlFor="code">Verification Code</label>
+                  <input id="code" type="text" placeholder="123456" value={verificationCode} onChange={(e) => setVerificationCode(e.target.value)} />
+                </div>
+              ) : null}
+
+              {(signupStep === 3 || authMode === 'login') ? (
+                <div>
+                  <label htmlFor="password">Password</label>
+                  <input id="password" type="password" placeholder="Enter password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                  {signupStep === 3 && (
+                    <>
+                      <label htmlFor="confirmPassword">Confirm Password</label>
+                      <input id="confirmPassword" type="password" placeholder="Confirm password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+                    </>
                   )}
-                </>
-              )}
-              {authMessage && <p className="auth-msg">{authMessage}</p>}
-              <button
-                type="button"
-                className="primary-btn wide"
-                onClick={handleAuthSubmit}
-                disabled={isSubmitting || (authMode === 'signup' && !emailVerified)}
-              >
-                {isSubmitting ? 'Please wait...' : authMode === 'login' ? 'Log In' : 'Create Account'}
+                </div>
+              ) : null}
+
+              <button type="button" className="primary-btn wide" onClick={authMode === 'login' ? handleAuthSubmit : signupStep === 1 ? sendVerificationCode : signupStep === 2 ? handleVerifyCode : handleAuthSubmit}>
+                {authMode === 'login' ? 'Log In' : signupStep === 1 ? 'Send Code' : signupStep === 2 ? 'Verify' : 'Create Account'}
               </button>
             </form>
 
             <div className="auth-actions">
-              <button type="button" className="ghost-btn" onClick={toggleAuthMode}>
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={toggleAuthMode}
+              >
                 {authMode === 'login' ? 'Need an account? Sign up' : 'Have an account? Log in'}
               </button>
               <button type="button" className="ghost-btn" onClick={() => setView('home')}>
