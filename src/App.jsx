@@ -1,33 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import logo from '../PearedUP-logo.png';
 
-const roleContent = {
-  student: {
-    heroTitle: 'Drop your syllabus and get paired with people learning the same thing.',
-    heroBody:
-      'Match by coursework and shared deadlines, train with an AI mentor, and earn smart-score points you can spend on cosmetics.',
-    heading: 'College Side',
-    subtitle: 'Upload your syllabus, get matched with classmates, and build better study sessions.',
-    bullets: [
-      'Connect using class materials and shared deadlines',
-      'Auto-group students by compatible schedules',
-      'Plan in-person or virtual sessions quickly'
-    ],
-    cta: 'Connect to Your University'
-  },
-  learner: {
-    heroTitle: 'Choose what you want to learn and get paired with people on the same path.',
-    heroBody:
-      'Match by interests and goals, learn with AI mentoring, and earn smart-score points you can spend on cosmetics.',
-    heading: 'Non-Student Side',
-    subtitle: 'Learn any topic with personalized guidance and peers who share your interests.',
-    bullets: [
-      'Create topic tracks tailored to your goals',
-      'Join interest-based learning circles',
-      'Get AI mentor support with adaptive pacing'
-    ],
-    cta: 'Start Personalized Plan'
-  }
+const heroContent = {
+  heroTitle: 'Drop your syllabus and get paired with people learning the same thing.',
+  heroBody:
+    'Match by coursework and shared deadlines, train with an AI mentor, and earn smart-score points you can spend on cosmetics.'
 };
 
 const roadmap = [
@@ -40,8 +17,55 @@ const roadmap = [
 ];
 
 export default function App() {
-  const [role, setRole] = useState('student');
-  const active = useMemo(() => roleContent[role], [role]);
+  const [view, setView] = useState('home');
+  const [authMode, setAuthMode] = useState('login');
+
+  if (view === 'auth') {
+    return (
+      <div className="page-shell auth-shell">
+        <main className="auth-page">
+          <section className="panel auth-card">
+            <p className="eyebrow">{authMode === 'login' ? 'Welcome Back' : 'Create Account'}</p>
+            <h2>{authMode === 'login' ? 'Log in to PearedUp' : 'Create your PearedUp account'}</h2>
+            <p className="muted">
+              {authMode === 'login'
+                ? 'Continue your study groups, mentoring sessions, and smart-score progress.'
+                : 'Join your classmates and peers, find your learning matches, and start earning smart-score points.'}
+            </p>
+
+            <form className="auth-form">
+              <label htmlFor="email">Email</label>
+              <input id="email" type="email" placeholder="you@school.edu" />
+              <label htmlFor="password">Password</label>
+              <input id="password" type="password" placeholder="Enter password" />
+              {authMode === 'signup' && (
+                <>
+                  <label htmlFor="confirmPassword">Confirm Password</label>
+                  <input id="confirmPassword" type="password" placeholder="Confirm password" />
+                </>
+              )}
+              <button type="button" className="primary-btn wide">
+                {authMode === 'login' ? 'Log In' : 'Create Account'}
+              </button>
+            </form>
+
+            <div className="auth-actions">
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
+              >
+                {authMode === 'login' ? 'Need an account? Sign up' : 'Have an account? Log in'}
+              </button>
+              <button type="button" className="ghost-btn" onClick={() => setView('home')}>
+                Back to Home
+              </button>
+            </div>
+          </section>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="page-shell">
@@ -54,46 +78,20 @@ export default function App() {
               <h1>PearedUp</h1>
             </div>
           </div>
-          <button className="ghost-btn">Create Account</button>
         </nav>
 
-        <div className="hero-grid">
+        <div className="hero-grid hero-grid-single">
           <section>
             <p className="tag">Connect. Study. Level Up.</p>
-            <h2>{active.heroTitle}</h2>
-            <p className="muted">{active.heroBody}</p>
+            <h2>{heroContent.heroTitle}</h2>
+            <p className="muted">{heroContent.heroBody}</p>
             <div className="cta-row">
-              <button className="primary-btn">Get Started</button>
+              <button className="primary-btn" onClick={() => setView('auth')}>
+                Get Started
+              </button>
               <button className="ghost-btn">View Demo Flow</button>
             </div>
           </section>
-
-          <aside className="glass-card">
-            <p className="eyebrow">Role Selection</p>
-            <div className="role-switch" role="tablist" aria-label="Choose user role">
-              <button
-                className={role === 'student' ? 'active' : ''}
-                onClick={() => setRole('student')}
-              >
-                Student
-              </button>
-              <button
-                className={role === 'learner' ? 'active' : ''}
-                onClick={() => setRole('learner')}
-              >
-                Non-Student
-              </button>
-            </div>
-
-            <h3>{active.heading}</h3>
-            <p>{active.subtitle}</p>
-            <ul>
-              {active.bullets.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-            <button className="primary-btn wide">{active.cta}</button>
-          </aside>
         </div>
       </header>
 

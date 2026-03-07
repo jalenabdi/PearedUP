@@ -87,6 +87,10 @@ p {
   grid-template-columns: 1.3fr 1fr;
 }
 
+.hero-grid-single {
+  grid-template-columns: 1fr;
+}
+
 .tag {
   color: var(--accent);
   font-weight: 700;
@@ -176,6 +180,59 @@ button {
 
 .wide {
   width: 100%;
+}
+
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+}
+
+.auth-page {
+  width: min(560px, 100%);
+}
+
+.auth-card {
+  padding: 1.3rem;
+}
+
+.auth-card h2 {
+  margin-top: 0.4rem;
+}
+
+.auth-form {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.auth-form label {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.auth-form input {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+  padding: 0.7rem 0.8rem;
+  font-family: inherit;
+}
+
+.auth-form input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.auth-form .primary-btn {
+  margin-top: 0.5rem;
+}
+
+.auth-actions {
+  margin-top: 0.8rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
 }
 
 .content {
