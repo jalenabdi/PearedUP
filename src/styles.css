@@ -374,3 +374,21 @@ button:disabled {
 .auth-actions .ghost-btn {
   font-size: 0.9rem;
 }
+
+.user-type-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.centered {
+  justify-content: center;
+}
+
+.profile-list {
+  margin-top: 1rem;
+  text-align: left;
+  width: 100%;
+  display: grid;
+  gap: 0.7rem;
+}

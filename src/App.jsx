@@ -47,7 +47,7 @@ export default function App() {
             if (!data.user.userType) {
               setView('user-type');
             } else {
-              setView('dashboard'); // or main app
+              setView('student-welcome');
             }
           }
         })
@@ -138,12 +138,14 @@ export default function App() {
       setMessage(data.message || (authMode === 'login' ? 'Login successful.' : 'Account created.'));
       if (authMode === 'login' && data.token) {
         localStorage.setItem('token', data.token);
+        const userFromResponse = data.user || { email, userType: data.userType };
+        const userType = userFromResponse?.userType;
         setToken(data.token);
-        setUser({ email, userType: data.userType });
-        if (!data.userType) {
+        setUser(userFromResponse);
+        if (!userType) {
           setView('user-type');
         } else {
-          setView('dashboard');
+          setView('student-welcome');
         }
       } else if (authMode === 'signup') {
         setAuthMode('login');
@@ -157,8 +159,8 @@ export default function App() {
   const handleSetUserType = async (type) => {
     try {
       const data = await postJson('/api/auth/set-user-type', { userType: type }, { Authorization: `Bearer ${token}` });
-      setUser({ ...user, userType: type });
-      setView('dashboard');
+      setUser((previous) => ({ ...previous, ...(data.user || {}), userType: type }));
+      setView('student-welcome');
     } catch (error) {
       setMessage(error.message);
     }
@@ -177,18 +179,15 @@ export default function App() {
 
   if (view === 'user-type') {
     return (
-      <div className="page-shell">
+      <div className="page-shell auth-shell">
         <main className="auth-page">
-          <section className="panel auth-card">
+          <section className="panel auth-card user-type-card">
             <p className="eyebrow">Welcome!</p>
-            <h2>Are you a student or non-student?</h2>
+            <h2>Are you a student?</h2>
             <p className="muted">This helps us personalize your experience.</p>
-            <div className="cta-row">
+            <div className="cta-row centered">
               <button className="primary-btn" onClick={() => handleSetUserType('student')}>
                 Student
-              </button>
-              <button className="ghost-btn" onClick={() => handleSetUserType('non-student')}>
-                Non-Student
               </button>
             </div>
           </section>
@@ -197,13 +196,33 @@ export default function App() {
     );
   }
 
-  if (view === 'dashboard') {
+  if (view === 'student-welcome') {
+    const displayName = user?.name || 'Not set yet';
+    const displayUsername = user?.username || (user?.email ? user.email.split('@')[0] : 'Not set yet');
+
     return (
-      <div className="page-shell">
-        <main>
-          <h1>Welcome to PearedUp, {user?.email}!</h1>
-          <p>You are a {user?.userType}.</p>
-          <button onClick={() => { localStorage.removeItem('token'); setToken(null); setUser(null); setView('home'); }}>Logout</button>
+      <div className="page-shell auth-shell">
+        <main className="auth-page">
+          <section className="panel auth-card">
+            <p className="eyebrow">Student Portal</p>
+            <h2>Welcome</h2>
+            <div className="profile-list">
+              <p><strong>Email:</strong> {user?.email || 'Not set yet'}</p>
+              <p><strong>Name:</strong> {displayName}</p>
+              <p><strong>Username:</strong> {displayUsername}</p>
+            </div>
+          </section>
+          <button
+            className="ghost-btn"
+            onClick={() => {
+              localStorage.removeItem('token');
+              setToken(null);
+              setUser(null);
+              setView('home');
+            }}
+          >
+            Logout
+          </button>
         </main>
       </div>
     );
