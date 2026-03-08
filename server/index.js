@@ -103,9 +103,12 @@ async function generateWithNebula(prompt) {
     throw new Error('Nebula API key is not configured.');
   }
 
-  const response = await fetch(`${NEBULA_URL}?key=${encodeURIComponent(NEBULA_API_KEY)}`, {
+  const response = await fetch(NEBULA_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': NEBULA_API_KEY
+    },
     signal: AbortSignal.timeout(NEBULA_TIMEOUT_MS),
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
