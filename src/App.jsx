@@ -1690,8 +1690,8 @@ export default function App() {
             <p className="muted">{heroContent.heroBody}</p>
             <div className={`home-comet-pear-wrap ${isPearCutting ? 'cutting' : ''}`}>
               <img
-                src={cometPear}
-                alt="Comet Zoro Pear"
+                src={logo}
+                alt="PearedUp logo"
                 className="home-comet-pear"
                 role="button"
                 tabIndex={0}
