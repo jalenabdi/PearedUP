@@ -5,5 +5,7 @@ node_modules/
 dist/
 
 # local env/config
+.env
+.env.example
 .DS_Store
 *.log
