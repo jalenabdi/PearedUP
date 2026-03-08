@@ -17,6 +17,8 @@ const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/pearedup';
 const VERIFICATION_TTL_MINUTES = Number(process.env.VERIFICATION_TTL_MINUTES || 15);
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 
 app.use(cors({ origin: CLIENT_ORIGIN }));
 app.use(express.json());
@@ -86,6 +88,59 @@ async function sendVerificationEmail(email, code) {
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
+});
+
+app.post('/api/chat/mentor', authenticate, async (req, res) => {
+  try {
+    if (!GEMINI_API_KEY) {
+      return res.status(500).json({ message: 'AI service is not configured. Set GEMINI_API_KEY in .env.' });
+    }
+
+    const message = String(req.body?.message || '').trim();
+    if (!message) {
+      return res.status(400).json({ message: 'Message is required.' });
+    }
+
+    const user = await User.findById(req.userId).select('email');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    const prompt = [
+      'You are PearedUp Mentor, a concise and friendly study mentor.',
+      `Current student email: ${user.email}.`,
+      'Give practical, step-by-step help for studying.',
+      `Student message: ${message}`
+    ].join('\n');
+
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+    const geminiResponse = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.4,
+          maxOutputTokens: 500
+        }
+      })
+    });
+
+    const geminiData = await geminiResponse.json().catch(() => ({}));
+    if (!geminiResponse.ok) {
+      const errorMessage =
+        geminiData?.error?.message || 'AI request failed. Check model name and API key.';
+      return res.status(502).json({ message: errorMessage });
+    }
+
+    const reply =
+      geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      'I could not generate a response. Please try again.';
+
+    return res.json({ reply });
+  } catch {
+    return res.status(500).json({ message: 'Failed to get AI response.' });
+  }
 });
 
 app.post('/api/auth/request-verification', async (req, res) => {

@@ -34,6 +34,11 @@ export default function App() {
   const [verificationCode, setVerificationCode] = useState('');
   const [message, setMessage] = useState('');
   const [pearAngle, setPearAngle] = useState(0);
+  const [chatInput, setChatInput] = useState('');
+  const [chatMessages, setChatMessages] = useState([
+    { role: 'assistant', text: 'Hi! I am your PearedUp study mentor. What are you studying today?' }
+  ]);
+  const [chatLoading, setChatLoading] = useState(false);
 
   useEffect(() => {
     if (token) {
@@ -178,6 +183,34 @@ export default function App() {
     resetAuthFeedback();
   };
 
+  const sendChatMessage = async () => {
+    const outgoing = chatInput.trim();
+    if (!outgoing || !token || chatLoading) return;
+
+    setChatMessages((previous) => [...previous, { role: 'user', text: outgoing }]);
+    setChatInput('');
+    setChatLoading(true);
+
+    try {
+      const data = await postJson(
+        '/api/chat/mentor',
+        { message: outgoing },
+        { Authorization: `Bearer ${token}` }
+      );
+      setChatMessages((previous) => [
+        ...previous,
+        { role: 'assistant', text: data.reply || 'No response returned.' }
+      ]);
+    } catch (error) {
+      setChatMessages((previous) => [
+        ...previous,
+        { role: 'assistant', text: `Error: ${error.message}` }
+      ]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
   if (view === 'user-type') {
     return (
       <div className="page-shell auth-shell">
@@ -250,7 +283,7 @@ export default function App() {
               className="feature-btn"
               onMouseEnter={() => setPearAngle(180)}
               onMouseLeave={() => setPearAngle(0)}
-              onClick={() => alert('Chat bot coming soon!')}
+              onClick={() => setView('chatbot')}
             >
               <div className="btn-icon">🤖</div>
               <h3>Chat Bot</h3>
@@ -270,6 +303,55 @@ export default function App() {
               <span className="pear-glyph" style={{ transform: `rotate(${pearAngle}deg)` }}>🍐</span>
             </div>
           </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (view === 'chatbot') {
+    return (
+      <div className="page-shell">
+        <header className="hero">
+          <nav className="top-nav">
+            <div className="brand">
+              <img src={logo} alt="PearedUp logo" className="logo-img" />
+              <div>
+                <h1>PearedUp Mentor</h1>
+              </div>
+            </div>
+            <button className="ghost-btn" onClick={() => setView('student-welcome')}>
+              Back
+            </button>
+          </nav>
+        </header>
+        <main className="chat-main">
+          <section className="panel chat-panel">
+            <div className="chat-log">
+              {chatMessages.map((entry, index) => (
+                <div key={`${entry.role}-${index}`} className={`chat-bubble ${entry.role}`}>
+                  {entry.text}
+                </div>
+              ))}
+              {chatLoading && <div className="chat-bubble assistant">Thinking...</div>}
+            </div>
+            <form
+              className="chat-input-row"
+              onSubmit={(event) => {
+                event.preventDefault();
+                sendChatMessage();
+              }}
+            >
+              <input
+                type="text"
+                placeholder="Ask your study question..."
+                value={chatInput}
+                onChange={(event) => setChatInput(event.target.value)}
+              />
+              <button type="submit" className="primary-btn" disabled={chatLoading || !chatInput.trim()}>
+                Send
+              </button>
+            </form>
+          </section>
         </main>
       </div>
     );
