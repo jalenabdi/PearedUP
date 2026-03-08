@@ -2166,6 +2166,28 @@ button:disabled {
   margin-top: 0.35rem;
 }
 
+.section-search-card {
+  transition: background 380ms ease, border-color 380ms ease, box-shadow 380ms ease;
+}
+
+.section-search-card.is-searching {
+  background:
+    radial-gradient(circle at 18% 22%, rgba(107, 211, 176, 0.12), transparent 44%),
+    radial-gradient(circle at 84% 18%, rgba(255, 205, 111, 0.12), transparent 42%),
+    var(--surface);
+  border-color: rgba(255, 205, 111, 0.38);
+  box-shadow: 0 0 0 1px rgba(255, 205, 111, 0.2), var(--shadow);
+}
+
+.section-search-card.has-results {
+  background:
+    radial-gradient(circle at 16% 18%, rgba(107, 211, 176, 0.1), transparent 46%),
+    radial-gradient(circle at 86% 20%, rgba(242, 100, 48, 0.09), transparent 44%),
+    var(--surface);
+  border-color: rgba(107, 211, 176, 0.35);
+  box-shadow: 0 0 0 1px rgba(107, 211, 176, 0.2), var(--shadow);
+}
+
 .section-helper {
   margin-top: 0.4rem;
   color: var(--muted);
@@ -2229,6 +2251,15 @@ button:disabled {
   background-size: 6px 6px, 6px 6px;
   background-repeat: no-repeat;
   padding-right: 2.2rem;
+}
+
+.section-search-controls .department-select {
+  color: var(--ink);
+}
+
+.section-search-controls .department-select option {
+  color: #111;
+  background: #fff;
 }
 
 .offset-field p {

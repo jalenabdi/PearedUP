@@ -1450,7 +1450,11 @@ export default function App() {
               </div>
             )}
 
-            <div className="section-search-card">
+            <div
+              className={`section-search-card ${sectionLoading ? 'is-searching' : ''} ${
+                !sectionLoading && sectionResults.length > 0 ? 'has-results' : ''
+              }`}
+            >
               <img src={cometPear} alt="Comet Zoro Pear" className="section-comet-pear" />
               <p className="eyebrow">Nebula Sections</p>
               <h3>Find Class & Syllabus Info</h3>
@@ -1463,6 +1467,7 @@ export default function App() {
               </div>
               <div className="section-search-controls">
                 <select
+                  className={subjectPrefixQuery ? 'department-select' : 'department-select is-placeholder'}
                   value={subjectPrefixQuery}
                   onChange={(event) => setSubjectPrefixQuery(event.target.value)}
                 >
