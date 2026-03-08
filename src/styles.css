@@ -289,6 +289,33 @@ button:disabled {
   margin: 2rem auto;
 }
 
+.button-center-pear {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3.2rem;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  pointer-events: none;
+  z-index: 1;
+  box-shadow: 0 0 20px rgba(255, 205, 111, 0.2);
+}
+
+.pear-glyph {
+  display: inline-flex;
+  font-size: 3.2rem;
+  line-height: 1;
+  transition: transform 220ms ease;
+}
+
 .feature-btn {
   position: absolute;
   width: 200px;
@@ -305,13 +332,15 @@ button:disabled {
   backdrop-filter: blur(8px);
   padding: 1rem;
   box-sizing: border-box;
+  z-index: 2;
 }
 
 .feature-btn:hover {
-  transform: scale(1.1);
   background: linear-gradient(135deg, var(--card), rgba(255, 205, 111, 0.1));
   border-color: var(--accent);
-  box-shadow: 0 8px 25px rgba(255, 205, 111, 0.2);
+  box-shadow:
+    0 12px 36px rgba(255, 205, 111, 0.35),
+    0 0 26px rgba(255, 205, 111, 0.3);
 }
 
 .feature-btn:nth-child(1) {
@@ -320,10 +349,18 @@ button:disabled {
   transform: translateX(-50%);
 }
 
+.feature-btn:nth-child(1):hover {
+  transform: translateX(-50%) scale(1.08);
+}
+
 .feature-btn:nth-child(2) {
   top: 50%;
   right: 0;
   transform: translateY(-50%);
+}
+
+.feature-btn:nth-child(2):hover {
+  transform: translateY(-50%) scale(1.08);
 }
 
 .feature-btn:nth-child(3) {
@@ -332,10 +369,18 @@ button:disabled {
   transform: translateX(-50%);
 }
 
+.feature-btn:nth-child(3):hover {
+  transform: translateX(-50%) scale(1.08);
+}
+
 .feature-btn:nth-child(4) {
   top: 50%;
   left: 0;
   transform: translateY(-50%);
+}
+
+.feature-btn:nth-child(4):hover {
+  transform: translateY(-50%) scale(1.08);
 }
 
 .btn-icon {

@@ -33,6 +33,7 @@ export default function App() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [message, setMessage] = useState('');
+  const [pearAngle, setPearAngle] = useState(0);
 
   useEffect(() => {
     if (token) {
@@ -225,26 +226,49 @@ export default function App() {
           <h2>Welcome back, {user?.email ? user.email.split('@')[0] : 'Student'}!</h2>
           <p>What would you like to do today?</p>
           <div className="button-grid">
-            <button className="feature-btn" onClick={() => alert('Connect feature coming soon!')}>
+            <button
+              className="feature-btn"
+              onMouseEnter={() => setPearAngle(0)}
+              onMouseLeave={() => setPearAngle(0)}
+              onClick={() => alert('Connect feature coming soon!')}
+            >
               <div className="btn-icon">🤝</div>
               <h3>Connect</h3>
               <p>Find study partners</p>
             </button>
-            <button className="feature-btn" onClick={() => alert('Syllabus uploader coming soon!')}>
+            <button
+              className="feature-btn"
+              onMouseEnter={() => setPearAngle(90)}
+              onMouseLeave={() => setPearAngle(0)}
+              onClick={() => alert('Syllabus uploader coming soon!')}
+            >
               <div className="btn-icon">📄</div>
               <h3>Syllabus PDF Uploader</h3>
               <p>Upload your course materials</p>
             </button>
-            <button className="feature-btn" onClick={() => alert('Chat bot coming soon!')}>
+            <button
+              className="feature-btn"
+              onMouseEnter={() => setPearAngle(180)}
+              onMouseLeave={() => setPearAngle(0)}
+              onClick={() => alert('Chat bot coming soon!')}
+            >
               <div className="btn-icon">🤖</div>
               <h3>Chat Bot</h3>
               <p>Get AI assistance</p>
             </button>
-            <button className="feature-btn" onClick={() => alert('Settings coming soon!')}>
+            <button
+              className="feature-btn"
+              onMouseEnter={() => setPearAngle(270)}
+              onMouseLeave={() => setPearAngle(0)}
+              onClick={() => alert('Settings coming soon!')}
+            >
               <div className="btn-icon">⚙️</div>
               <h3>Settings</h3>
               <p>Manage your account</p>
             </button>
+            <div className="button-center-pear" aria-hidden="true">
+              <span className="pear-glyph" style={{ transform: `rotate(${pearAngle}deg)` }}>🍐</span>
+            </div>
           </div>
         </main>
       </div>
