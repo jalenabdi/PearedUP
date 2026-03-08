@@ -24,7 +24,7 @@ async function postJson(url, payload, headers = {}) {
 
 export default function App() {
   const [view, setView] = useState('home');
-  const [authMode, setAuthMode] = useState('login');
+  const [authMode, setAuthMode] = useState('signup');
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('token') || null);
   const [signupStep, setSignupStep] = useState(1);
