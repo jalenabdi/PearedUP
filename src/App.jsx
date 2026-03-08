@@ -285,7 +285,7 @@ export default function App() {
   const dashboardDetectionStatus = user?.syllabusFoundation?.detectionStatus || syllabusDetectionStatus;
 
   const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
-  const isUtdEmail = (value) => String(value || '').trim().toLowerCase().endsWith('@utdallas.edu');
+  const hasUtdEmailString = (value) => String(value || '').toLowerCase().includes('@utdallas.edu');
 
   const resetAuthFeedback = () => {
     setMessage('');
@@ -296,8 +296,8 @@ export default function App() {
       setMessage('Enter a valid email first so we can verify it.');
       return;
     }
-    if (!isUtdEmail(email)) {
-      setMessage('Only @utdallas.edu emails can sign up.');
+    if (!hasUtdEmailString(email)) {
+      setMessage('Email must contain @utdallas.edu to sign up.');
       return;
     }
 
@@ -344,8 +344,8 @@ export default function App() {
     }
 
     if (authMode === 'signup') {
-      if (!isUtdEmail(email)) {
-        setMessage('Only @utdallas.edu emails can sign up.');
+      if (!hasUtdEmailString(email)) {
+        setMessage('Email must contain @utdallas.edu to sign up.');
         return;
       }
       if (password.length < 8) {

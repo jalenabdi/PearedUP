@@ -75,7 +75,6 @@ const optionalAuthenticate = (req, _res, next) => {
 };
 
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-const isUtdEmail = (email) => String(email || '').toLowerCase().endsWith('@utdallas.edu');
 const normalizeFirstName = (value) => String(value || '')
   .trim()
   .replace(/\s+/g, ' ')
@@ -546,9 +545,6 @@ app.post('/api/auth/request-verification', async (req, res) => {
     if (!isValidEmail(email)) {
       return res.status(400).json({ message: 'Enter a valid email address.' });
     }
-    if (!isUtdEmail(email)) {
-      return res.status(400).json({ message: 'Only @utdallas.edu emails can sign up.' });
-    }
 
     const code = createVerificationCode();
     const verificationCodeHash = hashCode(code);
@@ -616,9 +612,6 @@ app.post('/api/auth/signup', async (req, res) => {
 
     if (!isValidEmail(email)) {
       return res.status(400).json({ message: 'Enter a valid email address.' });
-    }
-    if (!isUtdEmail(email)) {
-      return res.status(400).json({ message: 'Only @utdallas.edu emails can sign up.' });
     }
 
     if (password.length < 8) {
