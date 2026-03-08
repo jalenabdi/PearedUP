@@ -297,7 +297,7 @@ export default function App() {
 
   const sendChatMessage = async () => {
     const trimmed = chatInput.trim();
-    if (!trimmed || !token || chatLoading) {
+    if (!trimmed || chatLoading) {
       return;
     }
 
@@ -307,11 +307,8 @@ export default function App() {
     setChatLoading(true);
 
     try {
-      const data = await postJson(
-        '/api/chat',
-        { message: trimmed },
-        { Authorization: `Bearer ${token}` }
-      );
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const data = await postJson('/api/chat', { message: trimmed }, headers);
 
       setChatHistory((previous) => [
         ...previous,
@@ -364,6 +361,53 @@ export default function App() {
     } finally {
       setSectionLoading(false);
     }
+  };
+
+  const getCourseHeader = (section) => {
+    const course = section?.course_details?.[0];
+    if (!course) return section.section_number || 'Section';
+    const code = [course.subject_prefix, course.course_number].filter(Boolean).join(' ');
+    return code ? `${code} - ${section.section_number || 'Section'}` : (section.section_number || 'Section');
+  };
+
+  const getCourseTitle = (section) => {
+    const course = section?.course_details?.[0];
+    return course?.title || 'No course title available';
+  };
+
+  const getSectionDescription = (section) => {
+    const parts = [];
+    const attributes = String(section?.attributes || '').trim();
+    const sessionStart = section?.academic_session?.start_date;
+    const sessionEnd = section?.academic_session?.end_date;
+    if (attributes) parts.push(attributes);
+    if (sessionStart || sessionEnd) parts.push(`Session: ${sessionStart || 'TBA'} to ${sessionEnd || 'TBA'}`);
+    if (parts.length === 0) return 'No additional description available.';
+    return parts.join(' • ');
+  };
+
+  const getProfessorNames = (section) => {
+    if (Array.isArray(section?.professor_names) && section.professor_names.length > 0) {
+      return section.professor_names.join(', ');
+    }
+
+    const details = Array.isArray(section?.professor_details) ? section.professor_details : [];
+    if (details.length > 0) {
+      return details
+        .map((prof) => [prof.first_name, prof.last_name].filter(Boolean).join(' ').trim())
+        .filter(Boolean)
+        .join(', ');
+    }
+    return 'Professor info unavailable';
+  };
+
+  const getMeetingSummary = (section) => {
+    const meeting = Array.isArray(section?.meetings) ? section.meetings[0] : null;
+    if (!meeting) return 'N/A';
+    const days = Array.isArray(meeting.meeting_days) ? meeting.meeting_days.join(', ') : 'N/A';
+    const time = [meeting.start_time, meeting.end_time].filter(Boolean).join(' - ') || 'Time TBA';
+    const location = [meeting?.location?.building, meeting?.location?.room].filter(Boolean).join(' ') || 'Location TBA';
+    return `${days} | ${time} | ${location}`;
   };
 
   if (view === 'user-type') {
@@ -685,11 +729,21 @@ export default function App() {
                 <div className="section-results">
                   {sectionResults.map((section) => (
                     <article key={section._id || `${section.section_number}-${section.internal_class_number}`} className="section-item">
-                      <p><strong>Section:</strong> {section.section_number || 'N/A'}</p>
-                      <p><strong>Class #:</strong> {section.internal_class_number || 'N/A'}</p>
-                      <p><strong>Mode:</strong> {section.instruction_mode || 'N/A'}</p>
-                      <p><strong>Session:</strong> {section.academic_session?.name || 'N/A'}</p>
-                      <p><strong>Syllabus:</strong> {section.syllabus_uri ? <a href={section.syllabus_uri} target="_blank" rel="noreferrer">Open link</a> : 'N/A'}</p>
+                      <h4>{getCourseHeader(section)}</h4>
+                      <p className="section-title">{getCourseTitle(section)}</p>
+                      <p className="section-description">{getSectionDescription(section)}</p>
+                      <div className="section-meta-grid">
+                        <p><strong>Class #:</strong> {section.internal_class_number || 'N/A'}</p>
+                        <p><strong>Mode:</strong> {section.instruction_mode || 'N/A'}</p>
+                        <p><strong>Session:</strong> {section.academic_session?.name || 'N/A'}</p>
+                        <p><strong>Professors:</strong> {getProfessorNames(section)}</p>
+                      </div>
+                      <p><strong>Meetings:</strong> {getMeetingSummary(section)}</p>
+                      <p><strong>Core Flags:</strong> {Array.isArray(section.core_flags) && section.core_flags.length ? section.core_flags.join(', ') : 'N/A'}</p>
+                      <div className="section-links">
+                        {section.syllabus_uri ? <a href={section.syllabus_uri} target="_blank" rel="noreferrer">Syllabus</a> : <span>Syllabus N/A</span>}
+                        {section?.meetings?.[0]?.location?.map_uri ? <a href={section.meetings[0].location.map_uri} target="_blank" rel="noreferrer">Map</a> : <span>Map N/A</span>}
+                      </div>
                     </article>
                   ))}
                 </div>

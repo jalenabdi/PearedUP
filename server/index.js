@@ -17,11 +17,13 @@ const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/pearedup';
 const VERIFICATION_TTL_MINUTES = Number(process.env.VERIFICATION_TTL_MINUTES || 15);
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-const CHAT_PROVIDER = process.env.CHAT_PROVIDER || 'nebula-first';
+const CHAT_PROVIDER = process.env.CHAT_PROVIDER || 'ollama-first';
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434/api/generate';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3';
 const OLLAMA_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS || 0);
-const OLLAMA_NUM_PREDICT = Number(process.env.OLLAMA_NUM_PREDICT || 512);
+const OLLAMA_NUM_PREDICT = Number(process.env.OLLAMA_NUM_PREDICT || 220);
+const OLLAMA_NUM_CTX = Number(process.env.OLLAMA_NUM_CTX || 2048);
+const OLLAMA_NUM_THREAD = Number(process.env.OLLAMA_NUM_THREAD || 8);
 const NEBULA_API_KEY = process.env.NEBULA_API_KEY || '';
 const NEBULA_MODEL = process.env.NEBULA_MODEL || 'gemini-2.0-flash';
 const NEBULA_URL =
@@ -52,6 +54,21 @@ const authenticate = (req, res, next) => {
   } catch {
     res.status(401).json({ message: 'Invalid token' });
   }
+};
+
+const optionalAuthenticate = (req, _res, next) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) {
+    req.userId = null;
+    return next();
+  }
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.userId = decoded.userId;
+  } catch {
+    req.userId = null;
+  }
+  next();
 };
 
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -138,7 +155,65 @@ app.get('/api/sections/search', authenticate, async (req, res) => {
       });
     }
 
-    return res.json(data);
+    const rows = Array.isArray(data?.data) ? data.data : [];
+    const objectIdPattern = /^[a-fA-F0-9]{24}$/;
+    const professorIds = [
+      ...new Set(
+        rows
+          .flatMap((section) => (Array.isArray(section?.professors) ? section.professors : []))
+          .filter((value) => typeof value === 'string' && objectIdPattern.test(value))
+      )
+    ];
+
+    const professorNameMap = new Map();
+    await Promise.all(
+      professorIds.map(async (id) => {
+        try {
+          const professorUrl = `${NEBULA_DATA_BASE_URL}/professor?_id=${encodeURIComponent(id)}`;
+          const professorResponse = await fetch(professorUrl, {
+            method: 'GET',
+            headers: {
+              Accept: 'application/json',
+              'x-api-key': NEBULA_API_KEY
+            },
+            signal: AbortSignal.timeout(NEBULA_TIMEOUT_MS)
+          });
+
+          const professorData = await professorResponse.json().catch(() => ({}));
+          if (!professorResponse.ok) return;
+          const first = Array.isArray(professorData?.data) ? professorData.data[0] : null;
+          if (!first) return;
+          const fullName = [first.first_name, first.last_name].filter(Boolean).join(' ').trim();
+          if (fullName) {
+            professorNameMap.set(id, fullName);
+          }
+        } catch {
+          // Skip professor name enrichment failures and still return section data.
+        }
+      })
+    );
+
+    const enrichedData = rows.map((section) => {
+      const professorNamesFromDetails = (Array.isArray(section?.professor_details) ? section.professor_details : [])
+        .map((prof) => [prof?.first_name, prof?.last_name].filter(Boolean).join(' ').trim())
+        .filter(Boolean);
+
+      const professorNamesFromIds = (Array.isArray(section?.professors) ? section.professors : [])
+        .map((value) => (typeof value === 'string' && professorNameMap.has(value) ? professorNameMap.get(value) : value))
+        .filter((value) => typeof value === 'string' && !objectIdPattern.test(value));
+
+      const professorNames = [...new Set([...professorNamesFromDetails, ...professorNamesFromIds])];
+
+      return {
+        ...section,
+        professor_names: professorNames
+      };
+    });
+
+    return res.json({
+      ...data,
+      data: enrichedData
+    });
   } catch (error) {
     if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
       return res.status(504).json({ message: 'Nebula sections request timed out.' });
@@ -205,6 +280,8 @@ async function generateWithOllama(prompt) {
       keep_alive: '15m',
       options: {
         num_predict: OLLAMA_NUM_PREDICT,
+        num_ctx: OLLAMA_NUM_CTX,
+        num_thread: OLLAMA_NUM_THREAD,
         temperature: 0.4,
         top_p: 0.9
       }
@@ -225,7 +302,7 @@ async function generateWithOllama(prompt) {
   return data.response;
 }
 
-app.post('/api/chat', authenticate, async (req, res) => {
+app.post('/api/chat', optionalAuthenticate, async (req, res) => {
   const message = String(req.body?.message || '').trim();
   const loweredMessage = message.toLowerCase();
 
@@ -241,13 +318,15 @@ app.post('/api/chat', authenticate, async (req, res) => {
     return res.json({ reply: 'Your life' });
   }
 
-  const prompt = `You are Gala, a friendly AI assistant. Answer clearly.\nUser: ${message}\nGala:`;
+  const prompt = `You are Gala, a friendly AI assistant. Answer briefly and clearly.\nUser: ${message}\nGala:`;
   const providers =
-    CHAT_PROVIDER === 'ollama-only'
-      ? ['ollama']
-      : CHAT_PROVIDER === 'nebula-only'
-        ? ['nebula']
-        : ['nebula', 'ollama'];
+    CHAT_PROVIDER === 'nebula-only'
+      ? ['nebula']
+      : CHAT_PROVIDER === 'nebula-first'
+        ? ['nebula', 'ollama']
+        : CHAT_PROVIDER === 'ollama-only'
+          ? ['ollama']
+          : ['ollama', 'nebula'];
 
   let lastError = 'No provider configured.';
   let nebulaFailure = '';
