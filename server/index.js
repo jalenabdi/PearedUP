@@ -157,41 +157,6 @@ app.get('/api/sections/search', authenticate, async (req, res) => {
 
     const rows = Array.isArray(data?.data) ? data.data : [];
     const objectIdPattern = /^[a-fA-F0-9]{24}$/;
-    const professorIds = [
-      ...new Set(
-        rows
-          .flatMap((section) => (Array.isArray(section?.professors) ? section.professors : []))
-          .filter((value) => typeof value === 'string' && objectIdPattern.test(value))
-      )
-    ];
-
-    const professorNameMap = new Map();
-    await Promise.all(
-      professorIds.map(async (id) => {
-        try {
-          const professorUrl = `${NEBULA_DATA_BASE_URL}/professor?_id=${encodeURIComponent(id)}`;
-          const professorResponse = await fetch(professorUrl, {
-            method: 'GET',
-            headers: {
-              Accept: 'application/json',
-              'x-api-key': NEBULA_API_KEY
-            },
-            signal: AbortSignal.timeout(NEBULA_TIMEOUT_MS)
-          });
-
-          const professorData = await professorResponse.json().catch(() => ({}));
-          if (!professorResponse.ok) return;
-          const first = Array.isArray(professorData?.data) ? professorData.data[0] : null;
-          if (!first) return;
-          const fullName = [first.first_name, first.last_name].filter(Boolean).join(' ').trim();
-          if (fullName) {
-            professorNameMap.set(id, fullName);
-          }
-        } catch {
-          // Skip professor name enrichment failures and still return section data.
-        }
-      })
-    );
 
     const enrichedData = rows.map((section) => {
       const professorNamesFromDetails = (Array.isArray(section?.professor_details) ? section.professor_details : [])
@@ -199,7 +164,6 @@ app.get('/api/sections/search', authenticate, async (req, res) => {
         .filter(Boolean);
 
       const professorNamesFromIds = (Array.isArray(section?.professors) ? section.professors : [])
-        .map((value) => (typeof value === 'string' && professorNameMap.has(value) ? professorNameMap.get(value) : value))
         .filter((value) => typeof value === 'string' && !objectIdPattern.test(value));
 
       const professorNames = [...new Set([...professorNamesFromDetails, ...professorNamesFromIds])];
@@ -209,6 +173,35 @@ app.get('/api/sections/search', authenticate, async (req, res) => {
         professor_names: professorNames
       };
     });
+
+    await Promise.all(
+      enrichedData.map(async (section) => {
+        if (Array.isArray(section.professor_names) && section.professor_names.length > 0) return;
+        if (!section?._id) return;
+        try {
+          const professorsUrl = `${NEBULA_DATA_BASE_URL}/section/${encodeURIComponent(section._id)}/professors`;
+          const professorsResponse = await fetch(professorsUrl, {
+            method: 'GET',
+            headers: {
+              Accept: 'application/json',
+              'x-api-key': NEBULA_API_KEY
+            },
+            signal: AbortSignal.timeout(NEBULA_TIMEOUT_MS)
+          });
+          if (!professorsResponse.ok) return;
+          const professorsData = await professorsResponse.json().catch(() => ({}));
+          const professorRows = Array.isArray(professorsData?.data) ? professorsData.data : [];
+          const names = professorRows
+            .map((prof) => [prof?.first_name, prof?.last_name].filter(Boolean).join(' ').trim())
+            .filter(Boolean);
+          if (names.length > 0) {
+            section.professor_names = [...new Set(names)];
+          }
+        } catch {
+          // Keep section data even if professor enrichment fails.
+        }
+      })
+    );
 
     return res.json({
       ...data,

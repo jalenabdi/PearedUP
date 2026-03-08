@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import logo from '../PearedUP-logo.png';
+import cometPear from '../Comet-Zoro-Pear.png';
 
 const heroContent = {
   heroTitle: 'Drop your syllabus and get paired with people learning the same thing.',
@@ -55,6 +56,10 @@ export default function App() {
     { role: 'assistant', text: 'Hey, I am Gala. Ask me anything about your studying and classes.', provider: 'ready' }
   ]);
   const [sectionNumberQuery, setSectionNumberQuery] = useState('');
+  const [subjectPrefixQuery, setSubjectPrefixQuery] = useState('');
+  const [courseNumberQuery, setCourseNumberQuery] = useState('');
+  const [professorLastNameQuery, setProfessorLastNameQuery] = useState('');
+  const [instructionModeQuery, setInstructionModeQuery] = useState('');
   const [sectionOffset, setSectionOffset] = useState('0');
   const [sectionLoading, setSectionLoading] = useState(false);
   const [sectionError, setSectionError] = useState('');
@@ -333,11 +338,15 @@ export default function App() {
   };
 
   const handleSectionSearch = async () => {
-    const query = sectionNumberQuery.trim();
+    const sectionNumber = sectionNumberQuery.trim();
+    const subjectPrefix = subjectPrefixQuery.trim().toUpperCase();
+    const courseNumber = courseNumberQuery.trim();
+    const professorLastName = professorLastNameQuery.trim();
+    const instructionMode = instructionModeQuery.trim();
     const offset = sectionOffset.trim() || '0';
 
-    if (!query) {
-      setSectionError('Enter a section number first.');
+    if (!sectionNumber && !subjectPrefix && !courseNumber && !professorLastName) {
+      setSectionError('Enter at least one search field (section, course, or professor).');
       setSectionResults([]);
       return;
     }
@@ -346,8 +355,16 @@ export default function App() {
     setSectionError('');
 
     try {
+      const queryParts = new URLSearchParams();
+      if (sectionNumber) queryParts.set('section_number', sectionNumber);
+      if (subjectPrefix) queryParts.set('course_details.subject_prefix', subjectPrefix);
+      if (courseNumber) queryParts.set('course_details.course_number', courseNumber);
+      if (professorLastName) queryParts.set('professor_details.last_name', professorLastName);
+      if (instructionMode) queryParts.set('instruction_mode', instructionMode);
+      queryParts.set('offset', offset);
+
       const data = await getJson(
-        `/api/sections/search?section_number=${encodeURIComponent(query)}&offset=${encodeURIComponent(offset)}`,
+        `/api/sections/search?${queryParts.toString()}`,
         { Authorization: `Bearer ${token}` }
       );
       const rows = Array.isArray(data?.data) ? data.data : [];
@@ -410,6 +427,15 @@ export default function App() {
     return `${days} | ${time} | ${location}`;
   };
 
+  const getMapHref = (section) => {
+    const explicit = section?.meetings?.[0]?.location?.map_uri;
+    if (explicit) return explicit;
+    const building = section?.meetings?.[0]?.location?.building;
+    const room = section?.meetings?.[0]?.location?.room;
+    if (!building && !room) return '';
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([building, room, 'UT Dallas'].filter(Boolean).join(' '))}`;
+  };
+
   if (view === 'user-type') {
     return (
       <div className={`${shellClass} auth-shell`}>
@@ -455,6 +481,8 @@ export default function App() {
           </nav>
         </header>
         <main className="welcome-main">
+          <img src={cometPear} alt="" aria-hidden="true" className="welcome-bg-comet welcome-bg-comet-left" />
+          <img src={cometPear} alt="" aria-hidden="true" className="welcome-bg-comet welcome-bg-comet-right" />
           <section className="dashboard-hero">
             <p className="eyebrow">Student Dashboard</p>
             <h2>Welcome back, {user?.email ? user.email.split('@')[0] : 'Student'}!</h2>
@@ -529,6 +557,7 @@ export default function App() {
 
         <main className="settings-main">
           <section className="panel settings-card">
+            <img src={cometPear} alt="Comet Zoro Pear" className="settings-comet-pear" />
             <p className="eyebrow">Preferences</p>
             <h2>Settings</h2>
             <p className="muted">Control how your dashboard looks.</p>
@@ -651,6 +680,10 @@ export default function App() {
                 <span className="pear-face">🍐</span>
               </div>
             </div>
+            <div className="chat-pear-banner">
+              <img src={cometPear} alt="Comet Zoro Pear" className="chat-comet-pear" />
+              <p>Comet mode active for peak study energy.</p>
+            </div>
             <div className="chat-metrics">
               <span className="metric-pill">Dual Engine: Nebula + Ollama</span>
               <span className="metric-pill">Hit Enter to send fast</span>
@@ -697,8 +730,16 @@ export default function App() {
             </div>
 
             <div className="section-search-card">
+              <img src={cometPear} alt="Comet Zoro Pear" className="section-comet-pear" />
               <p className="eyebrow">Nebula Sections</p>
-              <h3>Find Class Sections</h3>
+              <h3>Find Class & Syllabus Info</h3>
+              <p className="section-helper">
+                Search by section number, course code, or professor last name. Use any mix of fields.
+              </p>
+              <div className="offset-guide">
+                <span className="offset-chip">Offset Tip</span>
+                <span><strong>0</strong> = first page of results, <strong>10</strong> = skip first 10 matches.</span>
+              </div>
               <div className="section-search-controls">
                 <input
                   type="text"
@@ -707,15 +748,42 @@ export default function App() {
                   onChange={(event) => setSectionNumberQuery(event.target.value)}
                 />
                 <input
-                  type="number"
-                  min="0"
-                  placeholder="Offset"
-                  value={sectionOffset}
-                  onChange={(event) => setSectionOffset(event.target.value)}
+                  type="text"
+                  placeholder="Subject (e.g. CS)"
+                  value={subjectPrefixQuery}
+                  onChange={(event) => setSubjectPrefixQuery(event.target.value)}
                 />
+                <input
+                  type="text"
+                  placeholder="Course number (e.g. 1337)"
+                  value={courseNumberQuery}
+                  onChange={(event) => setCourseNumberQuery(event.target.value)}
+                />
+                <input
+                  type="text"
+                  placeholder="Professor last name"
+                  value={professorLastNameQuery}
+                  onChange={(event) => setProfessorLastNameQuery(event.target.value)}
+                />
+                <input
+                  type="text"
+                  placeholder="Instruction mode (optional)"
+                  value={instructionModeQuery}
+                  onChange={(event) => setInstructionModeQuery(event.target.value)}
+                />
+                <div className="offset-field">
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="Offset"
+                    value={sectionOffset}
+                    onChange={(event) => setSectionOffset(event.target.value)}
+                  />
+                  <p>Use 0 for first results; increase to paginate.</p>
+                </div>
                 <button
                   type="button"
-                  className="primary-btn"
+                  className="primary-btn section-search-btn"
                   onClick={handleSectionSearch}
                   disabled={sectionLoading}
                 >
@@ -739,10 +807,10 @@ export default function App() {
                         <p><strong>Professors:</strong> {getProfessorNames(section)}</p>
                       </div>
                       <p><strong>Meetings:</strong> {getMeetingSummary(section)}</p>
-                      <p><strong>Core Flags:</strong> {Array.isArray(section.core_flags) && section.core_flags.length ? section.core_flags.join(', ') : 'N/A'}</p>
+                        <p><strong>Core Flags:</strong> {Array.isArray(section.core_flags) && section.core_flags.length ? section.core_flags.join(', ') : 'N/A'}</p>
                       <div className="section-links">
                         {section.syllabus_uri ? <a href={section.syllabus_uri} target="_blank" rel="noreferrer">Syllabus</a> : <span>Syllabus N/A</span>}
-                        {section?.meetings?.[0]?.location?.map_uri ? <a href={section.meetings[0].location.map_uri} target="_blank" rel="noreferrer">Map</a> : <span>Map N/A</span>}
+                        {getMapHref(section) ? <a href={getMapHref(section)} target="_blank" rel="noreferrer">Map</a> : <span>Map N/A</span>}
                       </div>
                     </article>
                   ))}
@@ -760,6 +828,7 @@ export default function App() {
       <div className={`${shellClass} auth-shell`}>
         <main className="auth-page">
           <section className="panel auth-card">
+            <img src={cometPear} alt="Comet Zoro Pear" className="auth-comet-pear" />
             <p className="eyebrow">{authMode === 'login' ? 'Welcome Back' : signupStep === 1 ? 'Create Account' : signupStep === 2 ? 'Verify Email' : 'Set Password'}</p>
             <h2>{authMode === 'login' ? 'Log in to PearedUp' : signupStep === 1 ? 'Enter your email' : signupStep === 2 ? 'Enter verification code' : 'Create password'}</h2>
             <p className="muted">
@@ -843,6 +912,9 @@ export default function App() {
             <p className="tag">Connect. Study. Level Up.</p>
             <h2>{heroContent.heroTitle}</h2>
             <p className="muted">{heroContent.heroBody}</p>
+            <div className="home-comet-pear-wrap">
+              <img src={cometPear} alt="Comet Zoro Pear" className="home-comet-pear" />
+            </div>
             <div className="cta-row">
               <button className="primary-btn" onClick={() => switchView('auth')}>
                 Get Started
