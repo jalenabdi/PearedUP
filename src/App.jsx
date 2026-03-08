@@ -58,6 +58,7 @@ export default function App() {
   const [sectionLoading, setSectionLoading] = useState(false);
   const [sectionError, setSectionError] = useState('');
   const [sectionResults, setSectionResults] = useState([]);
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
   const chatEndRef = useRef(null);
 
   useEffect(() => {
@@ -87,6 +88,11 @@ export default function App() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatHistory, chatLoading]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
 
   const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
@@ -360,7 +366,7 @@ export default function App() {
               className="feature-btn"
               onMouseEnter={() => setPearAngle(270)}
               onMouseLeave={() => setPearAngle(0)}
-              onClick={() => alert('Settings coming soon!')}
+              onClick={() => setView('settings')}
             >
               <div className="btn-icon">⚙️</div>
               <h3>Settings</h3>
@@ -370,6 +376,49 @@ export default function App() {
               <span className="pear-glyph" style={{ transform: `rotate(${pearAngle}deg)` }}>🍐</span>
             </div>
           </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (view === 'settings') {
+    return (
+      <div className="page-shell">
+        <header className="hero">
+          <nav className="top-nav">
+            <div className="brand">
+              <img src={logo} alt="PearedUp logo" className="logo-img" />
+              <div>
+                <h1>PearedUp</h1>
+              </div>
+            </div>
+            <button className="ghost-btn" onClick={() => setView('student-welcome')}>
+              Back
+            </button>
+          </nav>
+        </header>
+
+        <main className="settings-main">
+          <section className="panel settings-card">
+            <p className="eyebrow">Preferences</p>
+            <h2>Settings</h2>
+            <p className="muted">Control how your dashboard looks.</p>
+
+            <div className="settings-row">
+              <div>
+                <h3>Appearance</h3>
+                <p className="muted">Switch between dark and light mode with a smooth transition.</p>
+              </div>
+              <button
+                type="button"
+                className={`theme-toggle ${theme === 'light' ? 'light' : 'dark'}`}
+                onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
+                aria-label="Toggle dark and light mode"
+              >
+                <span>{theme === 'dark' ? 'Dark' : 'Light'}</span>
+              </button>
+            </div>
+          </section>
         </main>
       </div>
     );
