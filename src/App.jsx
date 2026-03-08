@@ -38,6 +38,7 @@ async function getJson(url, headers = {}) {
 
 export default function App() {
   const [view, setView] = useState('home');
+  const [isViewTransitioning, setIsViewTransitioning] = useState(false);
   const [authMode, setAuthMode] = useState('signup');
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('token') || null);
@@ -59,7 +60,13 @@ export default function App() {
   const [sectionError, setSectionError] = useState('');
   const [sectionResults, setSectionResults] = useState([]);
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
+  const [motionPref, setMotionPref] = useState(localStorage.getItem('motion-pref') || 'smooth');
+  const [dashboardStyle, setDashboardStyle] = useState(localStorage.getItem('dashboard-style') || 'glow');
+  const [uiDensity, setUiDensity] = useState(localStorage.getItem('ui-density') || 'comfortable');
   const chatEndRef = useRef(null);
+  const transitionTimerRef = useRef(null);
+  const pearCenterRef = useRef(null);
+  const pearAngleRef = useRef(0);
 
   useEffect(() => {
     if (token) {
@@ -93,6 +100,81 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-motion', motionPref);
+    localStorage.setItem('motion-pref', motionPref);
+  }, [motionPref]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-dashboard-style', dashboardStyle);
+    localStorage.setItem('dashboard-style', dashboardStyle);
+  }, [dashboardStyle]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-ui-density', uiDensity);
+    localStorage.setItem('ui-density', uiDensity);
+  }, [uiDensity]);
+
+  useEffect(() => {
+    return () => {
+      if (transitionTimerRef.current) {
+        window.clearTimeout(transitionTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (view !== 'student-welcome') {
+      return;
+    }
+
+    const handlePointerMove = (event) => {
+      const center = pearCenterRef.current;
+      if (!center) {
+        return;
+      }
+
+      const rect = center.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const radians = Math.atan2(event.clientY - centerY, event.clientX - centerX);
+      const targetDegrees = ((radians * 180) / Math.PI + 90 + 360) % 360;
+
+      // Keep angle continuous to avoid a full-spin jump at the 0/360 seam.
+      let delta = targetDegrees - (pearAngleRef.current % 360);
+      if (delta > 180) {
+        delta -= 360;
+      } else if (delta < -180) {
+        delta += 360;
+      }
+
+      const nextAngle = pearAngleRef.current + delta;
+      pearAngleRef.current = nextAngle;
+      setPearAngle(nextAngle);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove, { passive: true });
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+    };
+  }, [view]);
+
+  const switchView = (nextView) => {
+    if (nextView === view) {
+      return;
+    }
+    setIsViewTransitioning(true);
+    if (transitionTimerRef.current) {
+      window.clearTimeout(transitionTimerRef.current);
+    }
+    transitionTimerRef.current = window.setTimeout(() => {
+      setView(nextView);
+      setIsViewTransitioning(false);
+    }, 180);
+  };
+
+  const shellClass = `page-shell ${isViewTransitioning ? 'page-transition-out' : 'page-transition-in'}`;
 
   const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
@@ -179,9 +261,9 @@ export default function App() {
         setToken(data.token);
         setUser(userFromResponse);
         if (!userType) {
-          setView('user-type');
+          switchView('user-type');
         } else {
-          setView('student-welcome');
+          switchView('student-welcome');
         }
       } else if (authMode === 'signup') {
         setAuthMode('login');
@@ -196,7 +278,7 @@ export default function App() {
     try {
       const data = await postJson('/api/auth/set-user-type', { userType: type }, { Authorization: `Bearer ${token}` });
       setUser((previous) => ({ ...previous, ...(data.user || {}), userType: type }));
-      setView('student-welcome');
+      switchView('student-welcome');
     } catch (error) {
       setMessage(error.message);
     }
@@ -286,7 +368,7 @@ export default function App() {
 
   if (view === 'user-type') {
     return (
-      <div className="page-shell auth-shell">
+      <div className={`${shellClass} auth-shell`}>
         <main className="auth-page">
           <section className="panel auth-card user-type-card">
             <p className="eyebrow">Welcome!</p>
@@ -305,7 +387,7 @@ export default function App() {
 
   if (view === 'student-welcome') {
     return (
-      <div className="page-shell">
+      <div className={shellClass}>
         <header className="hero">
           <nav className="top-nav">
             <div className="brand">
@@ -321,7 +403,7 @@ export default function App() {
                 localStorage.removeItem('token');
                 setToken(null);
                 setUser(null);
-                setView('home');
+                switchView('home');
               }}
             >
               Logout
@@ -329,50 +411,53 @@ export default function App() {
           </nav>
         </header>
         <main className="welcome-main">
-          <h2>Welcome back, {user?.email ? user.email.split('@')[0] : 'Student'}!</h2>
-          <p>What would you like to do today?</p>
-          <div className="button-grid">
+          <section className="dashboard-hero">
+            <p className="eyebrow">Student Dashboard</p>
+            <h2>Welcome back, {user?.email ? user.email.split('@')[0] : 'Student'}!</h2>
+            <p>Pick a lane and keep your momentum going.</p>
+            <div className="dashboard-meta">
+              <span className="meta-chip">Focus Mode: Active</span>
+              <span className="meta-chip">AI Mentor: Ready</span>
+              <span className="meta-chip">Theme: {theme === 'dark' ? 'Dark' : 'Light'}</span>
+              <span className="meta-chip">Motion: {motionPref === 'smooth' ? 'Smooth' : 'Reduced'}</span>
+            </div>
+          </section>
+
+          <div className="button-grid" role="group" aria-label="Dashboard actions">
+            <div className="dashboard-orb" aria-hidden="true"></div>
             <button
-              className="feature-btn"
-              onMouseEnter={() => setPearAngle(0)}
-              onMouseLeave={() => setPearAngle(0)}
+              className="feature-btn pos-top tone-mint"
               onClick={() => alert('Connect feature coming soon!')}
             >
               <div className="btn-icon">🤝</div>
               <h3>Connect</h3>
-              <p>Find study partners</p>
+              <p>Find your best study match</p>
             </button>
             <button
-              className="feature-btn"
-              onMouseEnter={() => setPearAngle(90)}
-              onMouseLeave={() => setPearAngle(0)}
+              className="feature-btn pos-right tone-amber"
               onClick={() => alert('Syllabus uploader coming soon!')}
             >
               <div className="btn-icon">📄</div>
               <h3>Syllabus PDF Uploader</h3>
-              <p>Upload your course materials</p>
+              <p>Drop your course doc and map it</p>
             </button>
             <button
-              className="feature-btn"
-              onMouseEnter={() => setPearAngle(180)}
-              onMouseLeave={() => setPearAngle(0)}
-              onClick={() => setView('chatbot')}
+              className="feature-btn pos-bottom tone-coral"
+              onClick={() => switchView('chatbot')}
             >
               <div className="btn-icon">🤖</div>
               <h3>Chat Bot</h3>
-              <p>Get AI assistance</p>
+              <p>Ask Gala for fast help</p>
             </button>
             <button
-              className="feature-btn"
-              onMouseEnter={() => setPearAngle(270)}
-              onMouseLeave={() => setPearAngle(0)}
-              onClick={() => setView('settings')}
+              className="feature-btn pos-left tone-sky"
+              onClick={() => switchView('settings')}
             >
               <div className="btn-icon">⚙️</div>
               <h3>Settings</h3>
-              <p>Manage your account</p>
+              <p>Adjust your workspace vibe</p>
             </button>
-            <div className="button-center-pear" aria-hidden="true">
+            <div className="button-center-pear" aria-hidden="true" ref={pearCenterRef}>
               <span className="pear-glyph" style={{ transform: `rotate(${pearAngle}deg)` }}>🍐</span>
             </div>
           </div>
@@ -383,7 +468,7 @@ export default function App() {
 
   if (view === 'settings') {
     return (
-      <div className="page-shell">
+      <div className={shellClass}>
         <header className="hero">
           <nav className="top-nav">
             <div className="brand">
@@ -392,7 +477,7 @@ export default function App() {
                 <h1>PearedUp</h1>
               </div>
             </div>
-            <button className="ghost-btn" onClick={() => setView('student-welcome')}>
+            <button className="ghost-btn" onClick={() => switchView('student-welcome')}>
               Back
             </button>
           </nav>
@@ -418,6 +503,75 @@ export default function App() {
                 <span>{theme === 'dark' ? 'Dark' : 'Light'}</span>
               </button>
             </div>
+
+            <div className="settings-row">
+              <div>
+                <h3>Dashboard Style</h3>
+                <p className="muted">Choose between a vivid glow look or a cleaner minimal canvas.</p>
+              </div>
+              <div className="settings-options">
+                <button
+                  type="button"
+                  className={`option-btn ${dashboardStyle === 'glow' ? 'active' : ''}`}
+                  onClick={() => setDashboardStyle('glow')}
+                >
+                  Glow
+                </button>
+                <button
+                  type="button"
+                  className={`option-btn ${dashboardStyle === 'minimal' ? 'active' : ''}`}
+                  onClick={() => setDashboardStyle('minimal')}
+                >
+                  Minimal
+                </button>
+              </div>
+            </div>
+
+            <div className="settings-row">
+              <div>
+                <h3>Motion</h3>
+                <p className="muted">Control animation intensity across transitions and hover effects.</p>
+              </div>
+              <div className="settings-options">
+                <button
+                  type="button"
+                  className={`option-btn ${motionPref === 'smooth' ? 'active' : ''}`}
+                  onClick={() => setMotionPref('smooth')}
+                >
+                  Smooth
+                </button>
+                <button
+                  type="button"
+                  className={`option-btn ${motionPref === 'reduced' ? 'active' : ''}`}
+                  onClick={() => setMotionPref('reduced')}
+                >
+                  Reduced
+                </button>
+              </div>
+            </div>
+
+            <div className="settings-row">
+              <div>
+                <h3>UI Density</h3>
+                <p className="muted">Adjust spacing and action button size for your preferred layout.</p>
+              </div>
+              <div className="settings-options">
+                <button
+                  type="button"
+                  className={`option-btn ${uiDensity === 'comfortable' ? 'active' : ''}`}
+                  onClick={() => setUiDensity('comfortable')}
+                >
+                  Comfortable
+                </button>
+                <button
+                  type="button"
+                  className={`option-btn ${uiDensity === 'compact' ? 'active' : ''}`}
+                  onClick={() => setUiDensity('compact')}
+                >
+                  Compact
+                </button>
+              </div>
+            </div>
           </section>
         </main>
       </div>
@@ -426,7 +580,7 @@ export default function App() {
 
   if (view === 'chatbot') {
     return (
-      <div className="page-shell">
+      <div className={shellClass}>
         <header className="hero">
           <nav className="top-nav">
             <div className="brand">
@@ -435,7 +589,7 @@ export default function App() {
                 <h1>PearedUp</h1>
               </div>
             </div>
-            <button className="ghost-btn" onClick={() => setView('student-welcome')}>
+            <button className="ghost-btn" onClick={() => switchView('student-welcome')}>
               Back
             </button>
           </nav>
@@ -549,7 +703,7 @@ export default function App() {
 
   if (view === 'auth') {
     return (
-      <div className="page-shell auth-shell">
+      <div className={`${shellClass} auth-shell`}>
         <main className="auth-page">
           <section className="panel auth-card">
             <p className="eyebrow">{authMode === 'login' ? 'Welcome Back' : signupStep === 1 ? 'Create Account' : signupStep === 2 ? 'Verify Email' : 'Set Password'}</p>
@@ -607,7 +761,7 @@ export default function App() {
               >
                 {authMode === 'login' ? 'Need an account? Sign up' : 'Have an account? Log in'}
               </button>
-              <button type="button" className="ghost-btn" onClick={() => setView('home')}>
+              <button type="button" className="ghost-btn" onClick={() => switchView('home')}>
                 Back to Home
               </button>
             </div>
@@ -618,7 +772,7 @@ export default function App() {
   }
 
   return (
-    <div className="page-shell">
+    <div className={shellClass}>
       <header className="hero">
         <nav className="top-nav">
           <div className="brand">
@@ -636,7 +790,7 @@ export default function App() {
             <h2>{heroContent.heroTitle}</h2>
             <p className="muted">{heroContent.heroBody}</p>
             <div className="cta-row">
-              <button className="primary-btn" onClick={() => setView('auth')}>
+              <button className="primary-btn" onClick={() => switchView('auth')}>
                 Get Started
               </button>
             </div>
