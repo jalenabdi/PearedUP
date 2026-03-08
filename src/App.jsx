@@ -22,6 +22,20 @@ async function postJson(url, payload, headers = {}) {
   return data;
 }
 
+async function getJson(url, headers = {}) {
+  const response = await fetch(url, {
+    method: 'GET',
+    headers
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.message || 'Request failed.');
+  }
+
+  return data;
+}
+
 export default function App() {
   const [view, setView] = useState('home');
   const [authMode, setAuthMode] = useState('signup');
@@ -39,6 +53,11 @@ export default function App() {
   const [chatHistory, setChatHistory] = useState([
     { role: 'assistant', text: 'Hey, I am Gala. Ask me anything about your studying and classes.', provider: 'ready' }
   ]);
+  const [sectionNumberQuery, setSectionNumberQuery] = useState('');
+  const [sectionOffset, setSectionOffset] = useState('0');
+  const [sectionLoading, setSectionLoading] = useState(false);
+  const [sectionError, setSectionError] = useState('');
+  const [sectionResults, setSectionResults] = useState([]);
   const chatEndRef = useRef(null);
 
   useEffect(() => {
@@ -228,6 +247,37 @@ export default function App() {
     setChatInput(text);
   };
 
+  const handleSectionSearch = async () => {
+    const query = sectionNumberQuery.trim();
+    const offset = sectionOffset.trim() || '0';
+
+    if (!query) {
+      setSectionError('Enter a section number first.');
+      setSectionResults([]);
+      return;
+    }
+
+    setSectionLoading(true);
+    setSectionError('');
+
+    try {
+      const data = await getJson(
+        `/api/sections/search?section_number=${encodeURIComponent(query)}&offset=${encodeURIComponent(offset)}`,
+        { Authorization: `Bearer ${token}` }
+      );
+      const rows = Array.isArray(data?.data) ? data.data : [];
+      setSectionResults(rows);
+      if (rows.length === 0) {
+        setSectionError('No matching sections found.');
+      }
+    } catch (error) {
+      setSectionResults([]);
+      setSectionError(error.message || 'Failed to fetch sections.');
+    } finally {
+      setSectionLoading(false);
+    }
+  };
+
   if (view === 'user-type') {
     return (
       <div className="page-shell auth-shell">
@@ -397,6 +447,50 @@ export default function App() {
               <button className="primary-btn" onClick={sendChatMessage} disabled={chatLoading || !chatInput.trim()}>
                 Send
               </button>
+            </div>
+
+            <div className="section-search-card">
+              <p className="eyebrow">Nebula Sections</p>
+              <h3>Find Class Sections</h3>
+              <div className="section-search-controls">
+                <input
+                  type="text"
+                  placeholder="Section number (e.g. 001)"
+                  value={sectionNumberQuery}
+                  onChange={(event) => setSectionNumberQuery(event.target.value)}
+                />
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Offset"
+                  value={sectionOffset}
+                  onChange={(event) => setSectionOffset(event.target.value)}
+                />
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={handleSectionSearch}
+                  disabled={sectionLoading}
+                >
+                  {sectionLoading ? 'Searching...' : 'Search'}
+                </button>
+              </div>
+
+              {sectionError && <p className="section-error">{sectionError}</p>}
+
+              {sectionResults.length > 0 && (
+                <div className="section-results">
+                  {sectionResults.map((section) => (
+                    <article key={section._id || `${section.section_number}-${section.internal_class_number}`} className="section-item">
+                      <p><strong>Section:</strong> {section.section_number || 'N/A'}</p>
+                      <p><strong>Class #:</strong> {section.internal_class_number || 'N/A'}</p>
+                      <p><strong>Mode:</strong> {section.instruction_mode || 'N/A'}</p>
+                      <p><strong>Session:</strong> {section.academic_session?.name || 'N/A'}</p>
+                      <p><strong>Syllabus:</strong> {section.syllabus_uri ? <a href={section.syllabus_uri} target="_blank" rel="noreferrer">Open link</a> : 'N/A'}</p>
+                    </article>
+                  ))}
+                </div>
+              )}
             </div>
           </section>
         </main>

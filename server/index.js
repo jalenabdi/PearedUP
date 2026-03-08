@@ -27,6 +27,8 @@ const NEBULA_MODEL = process.env.NEBULA_MODEL || 'gemini-2.0-flash';
 const NEBULA_URL =
   process.env.NEBULA_URL || `https://generativelanguage.googleapis.com/v1beta/models/${NEBULA_MODEL}:generateContent`;
 const NEBULA_TIMEOUT_MS = Number(process.env.NEBULA_TIMEOUT_MS || 10000);
+const NEBULA_METHOD = (process.env.NEBULA_METHOD || 'POST').toUpperCase();
+const NEBULA_DATA_BASE_URL = process.env.NEBULA_DATA_BASE_URL || 'https://api.utdnebula.com';
 
 app.use(cors({ origin: CLIENT_ORIGIN }));
 app.use(express.json());
@@ -98,30 +100,87 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
 });
 
+app.get('/api/sections/search', authenticate, async (req, res) => {
+  if (!NEBULA_API_KEY) {
+    return res.status(500).json({ message: 'Nebula API key is not configured.' });
+  }
+
+  try {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(req.query || {})) {
+      if (value === undefined || value === null || value === '') continue;
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (item !== undefined && item !== null && item !== '') {
+            params.append(key, String(item));
+          }
+        }
+      } else {
+        params.append(key, String(value));
+      }
+    }
+
+    const url = `${NEBULA_DATA_BASE_URL}/section${params.toString() ? `?${params.toString()}` : ''}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'x-api-key': NEBULA_API_KEY
+      },
+      signal: AbortSignal.timeout(NEBULA_TIMEOUT_MS)
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return res.status(response.status).json({
+        message: data?.message || 'Failed to fetch sections from Nebula.',
+        status: data?.status || response.status
+      });
+    }
+
+    return res.json(data);
+  } catch (error) {
+    if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
+      return res.status(504).json({ message: 'Nebula sections request timed out.' });
+    }
+    return res.status(500).json({ message: 'Failed to fetch sections.' });
+  }
+});
+
 async function generateWithNebula(prompt) {
   if (!NEBULA_API_KEY) {
     throw new Error('Nebula API key is not configured.');
   }
 
-  const response = await fetch(NEBULA_URL, {
-    method: 'POST',
+  const options = {
+    method: NEBULA_METHOD,
     headers: {
       'Content-Type': 'application/json',
+      'x-api-key': NEBULA_API_KEY,
       'x-goog-api-key': NEBULA_API_KEY
     },
-    signal: AbortSignal.timeout(NEBULA_TIMEOUT_MS),
-    body: JSON.stringify({
+    signal: AbortSignal.timeout(NEBULA_TIMEOUT_MS)
+  };
+
+  if (NEBULA_METHOD !== 'GET') {
+    options.body = JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         temperature: 0.4,
         topP: 0.9,
         maxOutputTokens: 220
       }
-    })
-  });
+    });
+  }
+
+  const response = await fetch(NEBULA_URL, options);
 
   const data = await response.json().catch(() => ({}));
-  const reply = data?.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('').trim();
+  const reply =
+    data?.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('').trim() ||
+    data?.reply ||
+    data?.message ||
+    (typeof data === 'string' ? data : '');
   if (!response.ok || !reply) {
     const apiMessage = data?.error?.message || 'Nebula request failed.';
     const apiStatus = data?.error?.status || '';
@@ -192,6 +251,7 @@ app.post('/api/chat', authenticate, async (req, res) => {
 
   let lastError = 'No provider configured.';
   let nebulaFailure = '';
+  const providerErrors = {};
   try {
     for (const provider of providers) {
       try {
@@ -205,13 +265,17 @@ app.post('/api/chat', authenticate, async (req, res) => {
         return res.json(payload);
       } catch (error) {
         lastError = error.message || `${provider} failed`;
+        providerErrors[provider] = lastError;
         if (provider === 'nebula') {
           nebulaFailure = lastError;
           console.warn('Nebula failed, fallback to Ollama:', lastError);
         }
       }
     }
-    return res.status(502).json({ message: lastError });
+    return res.status(502).json({
+      message: 'All chat providers failed.',
+      detail: providerErrors
+    });
   } catch (error) {
     if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
       return res.status(504).json({ message: 'Gala timed out. Increase timeout or try again.' });
