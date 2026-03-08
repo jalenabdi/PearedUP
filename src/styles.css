@@ -264,6 +264,99 @@ button:disabled {
   }
 }
 
+/* Welcome page styles */
+.welcome-main {
+  max-width: 1000px;
+  margin: 2rem auto;
+  padding: 0 1.5rem;
+  text-align: center;
+}
+
+.welcome-main h2 {
+  color: var(--ink);
+  margin-bottom: 0.5rem;
+}
+
+.welcome-main > p {
+  color: var(--muted);
+  margin-bottom: 2rem;
+}
+
+.button-grid {
+  position: relative;
+  width: 550px;
+  height: 550px;
+  margin: 2rem auto;
+}
+
+.feature-btn {
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(8px);
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
+.feature-btn:hover {
+  transform: scale(1.1);
+  background: linear-gradient(135deg, var(--card), rgba(255, 205, 111, 0.1));
+  border-color: var(--accent);
+  box-shadow: 0 8px 25px rgba(255, 205, 111, 0.2);
+}
+
+.feature-btn:nth-child(1) {
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.feature-btn:nth-child(2) {
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+}
+
+.feature-btn:nth-child(3) {
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.feature-btn:nth-child(4) {
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+}
+
+.btn-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.feature-btn h3 {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--ink);
+  text-align: center;
+}
+
+.feature-btn p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+  text-align: center;
+}
+
 /* Auth page styles */
 .auth-shell {
   display: flex;

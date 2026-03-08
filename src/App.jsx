@@ -197,32 +197,55 @@ export default function App() {
   }
 
   if (view === 'student-welcome') {
-    const displayName = user?.name || 'Not set yet';
-    const displayUsername = user?.username || (user?.email ? user.email.split('@')[0] : 'Not set yet');
-
     return (
-      <div className="page-shell auth-shell">
-        <main className="auth-page">
-          <section className="panel auth-card">
-            <p className="eyebrow">Student Portal</p>
-            <h2>Welcome</h2>
-            <div className="profile-list">
-              <p><strong>Email:</strong> {user?.email || 'Not set yet'}</p>
-              <p><strong>Name:</strong> {displayName}</p>
-              <p><strong>Username:</strong> {displayUsername}</p>
+      <div className="page-shell">
+        <header className="hero">
+          <nav className="top-nav">
+            <div className="brand">
+              <img src={logo} alt="PearedUp logo" className="logo-img" />
+              <div>
+                <p className="eyebrow"></p>
+                <h1>PearedUp</h1>
+              </div>
             </div>
-          </section>
-          <button
-            className="ghost-btn"
-            onClick={() => {
-              localStorage.removeItem('token');
-              setToken(null);
-              setUser(null);
-              setView('home');
-            }}
-          >
-            Logout
-          </button>
+            <button
+              className="ghost-btn"
+              onClick={() => {
+                localStorage.removeItem('token');
+                setToken(null);
+                setUser(null);
+                setView('home');
+              }}
+            >
+              Logout
+            </button>
+          </nav>
+        </header>
+        <main className="welcome-main">
+          <h2>Welcome back, {user?.email ? user.email.split('@')[0] : 'Student'}!</h2>
+          <p>What would you like to do today?</p>
+          <div className="button-grid">
+            <button className="feature-btn" onClick={() => alert('Connect feature coming soon!')}>
+              <div className="btn-icon">🤝</div>
+              <h3>Connect</h3>
+              <p>Find study partners</p>
+            </button>
+            <button className="feature-btn" onClick={() => alert('Syllabus uploader coming soon!')}>
+              <div className="btn-icon">📄</div>
+              <h3>Syllabus PDF Uploader</h3>
+              <p>Upload your course materials</p>
+            </button>
+            <button className="feature-btn" onClick={() => alert('Chat bot coming soon!')}>
+              <div className="btn-icon">🤖</div>
+              <h3>Chat Bot</h3>
+              <p>Get AI assistance</p>
+            </button>
+            <button className="feature-btn" onClick={() => alert('Settings coming soon!')}>
+              <div className="btn-icon">⚙️</div>
+              <h3>Settings</h3>
+              <p>Manage your account</p>
+            </button>
+          </div>
         </main>
       </div>
     );
