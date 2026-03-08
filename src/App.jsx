@@ -14,6 +14,7 @@ const heroContent = {
   heroBody:
     'Match by coursework and shared deadlines, train with an AI mentor, and earn smart-score points you can spend on cosmetics.'
 };
+const PEAR_CUT_MIN_MS = 1200;
 
 async function postJson(url, payload, headers = {}) {
   const response = await fetch(url, {
@@ -90,6 +91,7 @@ export default function App() {
   const [motionPref, setMotionPref] = useState(localStorage.getItem('motion-pref') || 'smooth');
   const [dashboardStyle, setDashboardStyle] = useState(localStorage.getItem('dashboard-style') || 'glow');
   const [uiDensity, setUiDensity] = useState(localStorage.getItem('ui-density') || 'comfortable');
+  const [isPearCutting, setIsPearCutting] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteMessage, setDeleteMessage] = useState('');
@@ -101,6 +103,9 @@ export default function App() {
   const pearCenterRef = useRef(null);
   const pearAngleRef = useRef(0);
   const profileMenuRef = useRef(null);
+  const pearCutStartRef = useRef(0);
+  const pearCutTimerRef = useRef(null);
+  const pearAuthBypassRef = useRef(false);
 
   useEffect(() => {
     if (token) {
@@ -155,6 +160,9 @@ export default function App() {
       if (transitionTimerRef.current) {
         window.clearTimeout(transitionTimerRef.current);
       }
+      if (pearCutTimerRef.current) {
+        window.clearTimeout(pearCutTimerRef.current);
+      }
     };
   }, []);
 
@@ -206,8 +214,15 @@ export default function App() {
   }, [view]);
 
   const switchView = (nextView) => {
+    if (nextView === 'auth' && view === 'home' && !pearAuthBypassRef.current) {
+      enterWithPearCut();
+      return;
+    }
     if (nextView === view) {
       return;
+    }
+    if (nextView === 'auth' && pearAuthBypassRef.current) {
+      pearAuthBypassRef.current = false;
     }
     setProfileMenuOpen(false);
     setIsViewTransitioning(true);
@@ -218,6 +233,39 @@ export default function App() {
       setView(nextView);
       setIsViewTransitioning(false);
     }, 180);
+  };
+
+  const enterWithPearCut = () => {
+    if (isPearCutting) return;
+    pearCutStartRef.current = Date.now();
+    if (pearCutTimerRef.current) {
+      window.clearTimeout(pearCutTimerRef.current);
+    }
+    pearCutTimerRef.current = window.setTimeout(() => {
+      pearAuthBypassRef.current = true;
+      switchView('auth');
+      setIsPearCutting(false);
+      pearCutTimerRef.current = null;
+    }, PEAR_CUT_MIN_MS + 220);
+    setIsPearCutting(true);
+  };
+
+  const handlePearCutComplete = (event) => {
+    if (event && event.target !== event.currentTarget) {
+      return;
+    }
+    if (!isPearCutting) return;
+    const elapsed = Date.now() - pearCutStartRef.current;
+    const remaining = Math.max(0, PEAR_CUT_MIN_MS - elapsed);
+    if (pearCutTimerRef.current) {
+      window.clearTimeout(pearCutTimerRef.current);
+    }
+    pearCutTimerRef.current = window.setTimeout(() => {
+      pearAuthBypassRef.current = true;
+      switchView('auth');
+      setIsPearCutting(false);
+      pearCutTimerRef.current = null;
+    }, remaining);
   };
 
   const shellClass = `page-shell ${isViewTransitioning ? 'page-transition-out' : 'page-transition-in'}`;
@@ -368,24 +416,28 @@ export default function App() {
     }
   };
 
-  const rankClubsByMajor = (clubs, major) => {
+  const filterClubsByMajor = (clubs, major) => {
     const normalizedMajor = String(major || '').trim().toLowerCase();
-    return [...clubs].sort((a, b) => {
-      const getScore = (club) => {
-        if (!normalizedMajor) return 0;
-        const haystack = [
-          club?.name,
-          club?.description,
-          ...(Array.isArray(club?.tags) ? club.tags : [])
-        ].join(' ').toLowerCase();
-        if (!haystack) return 0;
-        if (haystack.includes(normalizedMajor)) return 3;
-        if (normalizedMajor === 'cs' && /(coding|code|software|computer|hack|program)/.test(haystack)) return 2;
-        if (normalizedMajor === 'ece' && /(electrical|hardware|robot|embedded|circuit)/.test(haystack)) return 2;
-        if (normalizedMajor === 'math' && /(math|analysis|actuary|statistics)/.test(haystack)) return 2;
-        return 1;
-      };
-      return getScore(b) - getScore(a);
+    if (!normalizedMajor) return clubs;
+
+    const majorTagHints = {
+      cs: ['cs', 'computer-science', 'computer science', 'coding', 'hack', 'software', 'ai', 'ml'],
+      ece: ['ece', 'electrical', 'electronics', 'embedded', 'robotics', 'hardware', 'circuit'],
+      math: ['math', 'mathematics', 'statistics', 'actuary', 'quant'],
+      biol: ['biology', 'biomedical', 'med', 'health', 'neuro'],
+      mech: ['mechanical', 'robotics', 'manufacturing', 'aero'],
+      fin: ['finance', 'investment', 'banking', 'trading'],
+      mkt: ['marketing', 'branding', 'advertising'],
+      acct: ['accounting', 'audit', 'tax'],
+      psy: ['psychology', 'mental', 'behavioral'],
+      govt: ['government', 'policy', 'law', 'debate']
+    };
+
+    const hints = majorTagHints[normalizedMajor] || [normalizedMajor];
+    return clubs.filter((club) => {
+      const tags = (Array.isArray(club?.tags) ? club.tags : []).map((tag) => String(tag).toLowerCase());
+      const haystack = [club?.name, club?.description, ...tags].join(' ').toLowerCase();
+      return hints.some((hint) => tags.includes(hint) || haystack.includes(hint));
     });
   };
 
@@ -398,7 +450,7 @@ export default function App() {
       const q = major || 'student';
       const data = await getJson(`/api/clubs/search?q=${encodeURIComponent(q)}`, { Authorization: `Bearer ${token}` });
       const clubs = Array.isArray(data?.data) ? data.data : [];
-      setClubResults(rankClubsByMajor(clubs, major));
+      setClubResults(filterClubsByMajor(clubs, major));
     } catch (error) {
       setClubResults([]);
       setClubsError(error.message || 'Failed to load clubs.');
@@ -435,6 +487,14 @@ export default function App() {
 
   const removeAttachment = (name) => {
     setChatAttachments((previous) => previous.filter((item) => item.name !== name));
+  };
+
+  const formatAttachmentSize = (bytes) => {
+    const value = Number(bytes || 0);
+    if (!Number.isFinite(value) || value <= 0) return '0 B';
+    if (value < 1024) return `${value} B`;
+    if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+    return `${(value / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const handleDeleteAccount = async () => {
@@ -979,7 +1039,7 @@ export default function App() {
             <div className="settings-row">
               <div>
                 <h3>Major</h3>
-                <p className="muted">Used to rank clubs and personalize recommendations.</p>
+                <p className="muted">Used to filter clubs and personalize recommendations.</p>
               </div>
               <div className="settings-options">
                 <select
@@ -1269,10 +1329,12 @@ export default function App() {
 
         <main className="chat-main">
           <section className="panel chat-panel">
-            <p className="eyebrow">AI Mentor</p>
-            <h2>Gala Chatbot</h2>
             <div className="chat-top-row">
-              <p className="chat-subtext">Faster answers, cleaner help, and study-focused replies.</p>
+              <div className="chat-title-block">
+                <p className="eyebrow">AI Mentor</p>
+                <h2>Gala Chatbot</h2>
+                <p className="chat-subtext">Faster answers, cleaner help, and study-focused replies.</p>
+              </div>
               <div className="pear-balloon-wrap" aria-hidden="true">
                 <span className="pear-balloon-string"></span>
                 <span className="pear-balloon"></span>
@@ -1284,7 +1346,7 @@ export default function App() {
               <p>Comet mode active for peak study energy.</p>
             </div>
             <div className="chat-metrics">
-              <span className="metric-pill">Gala Smart Routing: Nebula + Ollama</span>
+              <span className="metric-pill">Gala Smart Routing: Nebula + Ollama + Gemini</span>
               <span className="metric-pill">Hit Enter to send fast</span>
             </div>
             <div className="quick-prompts">
@@ -1326,8 +1388,12 @@ export default function App() {
                   }
                 }}
               />
-              <label className="ghost-btn attach-btn" htmlFor="chat-attach-input">
-                Attach
+              <label className="attach-dropzone" htmlFor="chat-attach-input">
+                <span className="attach-icon" aria-hidden="true">📎</span>
+                <span className="attach-copy">
+                  <strong>Attach files</strong>
+                  <small>Text files work best for Gala context</small>
+                </span>
               </label>
               <input id="chat-attach-input" type="file" multiple onChange={handleAttachFiles} className="hidden-file-input" />
               <button className="primary-btn" onClick={sendChatMessage} disabled={chatLoading || !chatInput.trim()}>
@@ -1335,11 +1401,25 @@ export default function App() {
               </button>
             </div>
             {chatAttachments.length > 0 && (
-              <div className="attachment-chip-row">
+              <div className="attachment-chip-row" role="list" aria-label="Attached files">
                 {chatAttachments.map((item) => (
-                  <button key={item.name} type="button" className="attachment-chip" onClick={() => removeAttachment(item.name)}>
-                    {item.name} ✕
-                  </button>
+                  <article key={item.name} className="attachment-chip" role="listitem">
+                    <div className="attachment-meta">
+                      <p className="attachment-name">{item.name}</p>
+                      <p className="attachment-submeta">
+                        {item.type || 'unknown'} • {formatAttachmentSize(item.size)}
+                        {item.textSnippet ? ' • text ready' : ''}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="attachment-remove"
+                      onClick={() => removeAttachment(item.name)}
+                      aria-label={`Remove ${item.name}`}
+                    >
+                      Remove
+                    </button>
+                  </article>
                 ))}
               </div>
             )}
@@ -1510,6 +1590,13 @@ export default function App() {
 
   return (
     <div className={shellClass}>
+      {isPearCutting && (
+        <div className="pear-cut-overlay" aria-hidden="true" onAnimationEnd={handlePearCutComplete}>
+          <span className="pear-cut-overlay-slash"></span>
+          <span className="pear-cut-overlay-burst"></span>
+          <span className="pear-cut-overlay-icon">⚔️</span>
+        </div>
+      )}
       <header className="hero">
         <nav className="top-nav">
           <div className="brand">
@@ -1526,12 +1613,26 @@ export default function App() {
             <p className="tag">Connect. Study. Level Up.</p>
             <h2>{heroContent.heroTitle}</h2>
             <p className="muted">{heroContent.heroBody}</p>
-            <div className="home-comet-pear-wrap">
-              <img src={cometPear} alt="Comet Zoro Pear" className="home-comet-pear" />
+            <div className={`home-comet-pear-wrap ${isPearCutting ? 'cutting' : ''}`}>
+              <img
+                src={cometPear}
+                alt="Comet Zoro Pear"
+                className="home-comet-pear"
+                role="button"
+                tabIndex={0}
+                onClick={enterWithPearCut}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    enterWithPearCut();
+                  }
+                }}
+              />
+              {isPearCutting && <span className="pear-chop-mark" aria-hidden="true">⚔️</span>}
             </div>
             <div className="cta-row">
-              <button className="primary-btn" onClick={() => switchView('auth')}>
-                Get Started
+              <button className="primary-btn" onClick={enterWithPearCut} disabled={isPearCutting}>
+                {isPearCutting ? 'Slicing...' : 'Get Started'}
               </button>
             </div>
           </section>
