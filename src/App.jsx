@@ -821,14 +821,19 @@ export default function App() {
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([building, room, 'UT Dallas'].filter(Boolean).join(' '))}`;
   };
 
+  const profileDisplayName = user?.firstName || (user?.email ? user.email.split('@')[0] : 'Profile');
+
   const profileMenu = (
     <div className="profile-menu-wrap" ref={profileMenuRef}>
       <button
         type="button"
-        className="ghost-btn profile-trigger"
+        className="ghost-btn profile-trigger with-name"
         onClick={() => setProfileMenuOpen((current) => !current)}
       >
-        Profile
+        <span className="profile-avatar">
+          {profileDisplayName.charAt(0).toUpperCase()}
+        </span>
+        <span className="profile-name">{profileDisplayName}</span>
       </button>
       {profileMenuOpen && (
         <div className="profile-menu">
