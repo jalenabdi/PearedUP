@@ -14,7 +14,9 @@ const heroContent = {
   heroBody:
     'Match by coursework and shared deadlines, train with an AI mentor, and earn smart-score points you can spend on cosmetics.'
 };
-const PEAR_CUT_MIN_MS = 1200;
+const PEAR_CUT_FORCE_MS = 1900;
+const PAGE_TRANSITION_MS = 300;
+const DASHBOARD_CUT_MS = 820;
 
 async function postJson(url, payload, headers = {}) {
   const response = await fetch(url, {
@@ -98,14 +100,15 @@ export default function App() {
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [majorSaving, setMajorSaving] = useState(false);
   const [majorMessage, setMajorMessage] = useState('');
+  const [isDashboardCutting, setIsDashboardCutting] = useState(false);
+  const [dashboardCutFx, setDashboardCutFx] = useState({ x: 0, y: 0 });
+  const [dashboardCutTarget, setDashboardCutTarget] = useState('');
   const chatEndRef = useRef(null);
   const transitionTimerRef = useRef(null);
   const pearCenterRef = useRef(null);
   const pearAngleRef = useRef(0);
   const profileMenuRef = useRef(null);
-  const pearCutStartRef = useRef(0);
   const pearCutTimerRef = useRef(null);
-  const pearAuthBypassRef = useRef(false);
 
   useEffect(() => {
     if (token) {
@@ -214,15 +217,12 @@ export default function App() {
   }, [view]);
 
   const switchView = (nextView) => {
-    if (nextView === 'auth' && view === 'home' && !pearAuthBypassRef.current) {
+    if (nextView === 'auth' && view === 'home') {
       enterWithPearCut();
       return;
     }
     if (nextView === view) {
       return;
-    }
-    if (nextView === 'auth' && pearAuthBypassRef.current) {
-      pearAuthBypassRef.current = false;
     }
     setProfileMenuOpen(false);
     setIsViewTransitioning(true);
@@ -232,40 +232,37 @@ export default function App() {
     transitionTimerRef.current = window.setTimeout(() => {
       setView(nextView);
       setIsViewTransitioning(false);
-    }, 180);
+    }, PAGE_TRANSITION_MS);
+  };
+
+  const switchDashboardViewWithCut = (nextView, target, event) => {
+    if (isDashboardCutting) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    setDashboardCutFx({
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2
+    });
+    setDashboardCutTarget(target);
+    setIsDashboardCutting(true);
+    window.setTimeout(() => {
+      setView(nextView);
+      setDashboardCutTarget('');
+      setIsDashboardCutting(false);
+    }, DASHBOARD_CUT_MS);
   };
 
   const enterWithPearCut = () => {
     if (isPearCutting) return;
-    pearCutStartRef.current = Date.now();
     if (pearCutTimerRef.current) {
       window.clearTimeout(pearCutTimerRef.current);
     }
     pearCutTimerRef.current = window.setTimeout(() => {
-      pearAuthBypassRef.current = true;
-      switchView('auth');
+      setIsViewTransitioning(false);
+      setView('auth');
       setIsPearCutting(false);
       pearCutTimerRef.current = null;
-    }, PEAR_CUT_MIN_MS + 220);
+    }, PEAR_CUT_FORCE_MS);
     setIsPearCutting(true);
-  };
-
-  const handlePearCutComplete = (event) => {
-    if (event && event.target !== event.currentTarget) {
-      return;
-    }
-    if (!isPearCutting) return;
-    const elapsed = Date.now() - pearCutStartRef.current;
-    const remaining = Math.max(0, PEAR_CUT_MIN_MS - elapsed);
-    if (pearCutTimerRef.current) {
-      window.clearTimeout(pearCutTimerRef.current);
-    }
-    pearCutTimerRef.current = window.setTimeout(() => {
-      pearAuthBypassRef.current = true;
-      switchView('auth');
-      setIsPearCutting(false);
-      pearCutTimerRef.current = null;
-    }, remaining);
   };
 
   const shellClass = `page-shell ${isViewTransitioning ? 'page-transition-out' : 'page-transition-in'}`;
@@ -894,32 +891,36 @@ export default function App() {
           <div className="button-grid" role="group" aria-label="Dashboard actions">
             <div className="dashboard-orb" aria-hidden="true"></div>
             <button
-              className="feature-btn pos-top tone-mint"
-              onClick={() => switchView('connect')}
+              className={`feature-btn pos-top tone-mint ${isDashboardCutting && dashboardCutTarget === 'connect' ? 'circle-splitting' : ''}`}
+              onClick={(event) => switchDashboardViewWithCut('connect', 'connect', event)}
+              disabled={isDashboardCutting}
             >
               <div className="btn-icon">🤝</div>
               <h3>Connect</h3>
               <p>Find your best study match</p>
             </button>
             <button
-              className="feature-btn pos-right tone-amber"
-              onClick={() => switchView('syllabus')}
+              className={`feature-btn pos-right tone-amber ${isDashboardCutting && dashboardCutTarget === 'syllabus' ? 'circle-splitting' : ''}`}
+              onClick={(event) => switchDashboardViewWithCut('syllabus', 'syllabus', event)}
+              disabled={isDashboardCutting}
             >
               <div className="btn-icon">📄</div>
               <h3>Syllabus PDF Uploader</h3>
               <p>Drop your course doc and map it</p>
             </button>
             <button
-              className="feature-btn pos-bottom tone-coral"
-              onClick={() => switchView('chatbot')}
+              className={`feature-btn pos-bottom tone-coral ${isDashboardCutting && dashboardCutTarget === 'chatbot' ? 'circle-splitting' : ''}`}
+              onClick={(event) => switchDashboardViewWithCut('chatbot', 'chatbot', event)}
+              disabled={isDashboardCutting}
             >
               <div className="btn-icon">🤖</div>
               <h3>Chat Bot</h3>
               <p>Ask Gala for fast help</p>
             </button>
             <button
-              className="feature-btn pos-left tone-sky"
-              onClick={() => switchView('clubs')}
+              className={`feature-btn pos-left tone-sky ${isDashboardCutting && dashboardCutTarget === 'clubs' ? 'circle-splitting' : ''}`}
+              onClick={(event) => switchDashboardViewWithCut('clubs', 'clubs', event)}
+              disabled={isDashboardCutting}
             >
               <div className="btn-icon">🏛️</div>
               <h3>Clubs</h3>
@@ -928,6 +929,22 @@ export default function App() {
             <div className="button-center-pear" aria-hidden="true" ref={pearCenterRef}>
               <span className="pear-glyph" style={{ transform: `rotate(${pearAngle}deg)` }}>🍐</span>
             </div>
+            {isDashboardCutting && (
+              <div className="dashboard-cut-overlay" aria-hidden="true">
+                <img
+                  src={cometPear}
+                  alt=""
+                  className="dashboard-cut-zoro"
+                  style={{ '--cut-x': `${dashboardCutFx.x}px`, '--cut-y': `${dashboardCutFx.y}px` }}
+                />
+                <span className="dashboard-cut-circle" style={{ '--cut-x': `${dashboardCutFx.x}px`, '--cut-y': `${dashboardCutFx.y}px` }}>
+                  <span className="dashboard-cut-half top"></span>
+                  <span className="dashboard-cut-half bottom"></span>
+                </span>
+                <span className="dashboard-cut-slash" style={{ '--cut-x': `${dashboardCutFx.x}px`, '--cut-y': `${dashboardCutFx.y}px` }}></span>
+                <span className="dashboard-cut-flash" style={{ '--cut-x': `${dashboardCutFx.x}px`, '--cut-y': `${dashboardCutFx.y}px` }}></span>
+              </div>
+            )}
           </div>
         </main>
       </div>
@@ -1600,7 +1617,8 @@ export default function App() {
   return (
     <div className={shellClass}>
       {isPearCutting && (
-        <div className="pear-cut-overlay" aria-hidden="true" onAnimationEnd={handlePearCutComplete}>
+        <div className="pear-cut-overlay" aria-hidden="true">
+          <img src={cometPear} alt="" className="pear-cut-zoro" />
           <span className="pear-cut-overlay-slash"></span>
           <span className="pear-cut-overlay-burst"></span>
           <span className="pear-cut-overlay-icon">⚔️</span>
