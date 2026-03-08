@@ -61,8 +61,7 @@ export default function App() {
   const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
   const resetAuthFeedback = () => {
-    setVerificationMessage('');
-    setAuthMessage('');
+    setMessage('');
   };
 
   const sendVerificationCode = async () => {
@@ -163,6 +162,17 @@ export default function App() {
     } catch (error) {
       setMessage(error.message);
     }
+  };
+
+  const toggleAuthMode = () => {
+    const nextMode = authMode === 'login' ? 'signup' : 'login';
+    setAuthMode(nextMode);
+    setSignupStep(1);
+    setEmail('');
+    setPassword('');
+    setConfirmPassword('');
+    setVerificationCode('');
+    resetAuthFeedback();
   };
 
   if (view === 'user-type') {
