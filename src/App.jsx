@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import logo from '../PearedUP-logo.png';
 
 const heroContent = {
@@ -35,10 +35,11 @@ export default function App() {
   const [message, setMessage] = useState('');
   const [pearAngle, setPearAngle] = useState(0);
   const [chatInput, setChatInput] = useState('');
-  const [chatMessages, setChatMessages] = useState([
-    { role: 'assistant', text: 'Hi! I am your PearedUp study mentor. What are you studying today?' }
-  ]);
   const [chatLoading, setChatLoading] = useState(false);
+  const [chatHistory, setChatHistory] = useState([
+    { role: 'assistant', text: 'Hey, I am Gala. Ask me anything about your studying and classes.', provider: 'ready' }
+  ]);
+  const chatEndRef = useRef(null);
 
   useEffect(() => {
     if (token) {
@@ -63,6 +64,10 @@ export default function App() {
         });
     }
   }, [token]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatHistory, chatLoading]);
 
   const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
@@ -184,31 +189,43 @@ export default function App() {
   };
 
   const sendChatMessage = async () => {
-    const outgoing = chatInput.trim();
-    if (!outgoing || !token || chatLoading) return;
+    const trimmed = chatInput.trim();
+    if (!trimmed || !token || chatLoading) {
+      return;
+    }
 
-    setChatMessages((previous) => [...previous, { role: 'user', text: outgoing }]);
+    const userMessage = { role: 'user', text: trimmed };
+    setChatHistory((previous) => [...previous, userMessage]);
     setChatInput('');
     setChatLoading(true);
 
     try {
       const data = await postJson(
-        '/api/chat/mentor',
-        { message: outgoing },
+        '/api/chat',
+        { message: trimmed },
         { Authorization: `Bearer ${token}` }
       );
-      setChatMessages((previous) => [
+
+      setChatHistory((previous) => [
         ...previous,
-        { role: 'assistant', text: data.reply || 'No response returned.' }
+        {
+          role: 'assistant',
+          text: data.reply || 'No reply from model.',
+          provider: data.fallbackFrom ? `${data.provider}-fallback` : (data.provider || 'unknown')
+        }
       ]);
     } catch (error) {
-      setChatMessages((previous) => [
+      setChatHistory((previous) => [
         ...previous,
-        { role: 'assistant', text: `Error: ${error.message}` }
+        { role: 'assistant', text: error.message || 'Something went wrong.', provider: 'error' }
       ]);
     } finally {
       setChatLoading(false);
     }
+  };
+
+  const quickPrompt = (text) => {
+    setChatInput(text);
   };
 
   if (view === 'user-type') {
@@ -316,7 +333,7 @@ export default function App() {
             <div className="brand">
               <img src={logo} alt="PearedUp logo" className="logo-img" />
               <div>
-                <h1>PearedUp Mentor</h1>
+                <h1>PearedUp</h1>
               </div>
             </div>
             <button className="ghost-btn" onClick={() => setView('student-welcome')}>
@@ -324,33 +341,63 @@ export default function App() {
             </button>
           </nav>
         </header>
+
         <main className="chat-main">
           <section className="panel chat-panel">
-            <div className="chat-log">
-              {chatMessages.map((entry, index) => (
+            <p className="eyebrow">AI Mentor</p>
+            <h2>Gala Chatbot</h2>
+            <div className="chat-top-row">
+              <p className="chat-subtext">Faster answers, cleaner help, and study-focused replies.</p>
+              <div className="pear-balloon-wrap" aria-hidden="true">
+                <span className="pear-balloon-string"></span>
+                <span className="pear-balloon"></span>
+                <span className="pear-face">🍐</span>
+              </div>
+            </div>
+            <div className="chat-metrics">
+              <span className="metric-pill">Dual Engine: Nebula + Ollama</span>
+              <span className="metric-pill">Hit Enter to send fast</span>
+            </div>
+            <div className="quick-prompts">
+              <button type="button" className="ghost-btn quick-btn" onClick={() => quickPrompt('Help me plan my study schedule for this week.')}>
+                Study Plan
+              </button>
+              <button type="button" className="ghost-btn quick-btn" onClick={() => quickPrompt('Quiz me on biology cell structure with 5 questions.')}>
+                Quick Quiz
+              </button>
+              <button type="button" className="ghost-btn quick-btn" onClick={() => quickPrompt('Summarize my chapter into key points.')}>
+                Summarize
+              </button>
+            </div>
+            <div className="chat-history">
+              {chatHistory.map((entry, index) => (
                 <div key={`${entry.role}-${index}`} className={`chat-bubble ${entry.role}`}>
                   {entry.text}
+                  {entry.role === 'assistant' && entry.provider && (
+                    <span className={`provider-tag ${entry.provider}`}>{entry.provider}</span>
+                  )}
                 </div>
               ))}
               {chatLoading && <div className="chat-bubble assistant">Thinking...</div>}
+              <div ref={chatEndRef} />
             </div>
-            <form
-              className="chat-input-row"
-              onSubmit={(event) => {
-                event.preventDefault();
-                sendChatMessage();
-              }}
-            >
+            <div className="chat-input-row">
               <input
                 type="text"
-                placeholder="Ask your study question..."
+                placeholder="Ask Gala anything..."
                 value={chatInput}
                 onChange={(event) => setChatInput(event.target.value)}
+                disabled={chatLoading}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    sendChatMessage();
+                  }
+                }}
               />
-              <button type="submit" className="primary-btn" disabled={chatLoading || !chatInput.trim()}>
+              <button className="primary-btn" onClick={sendChatMessage} disabled={chatLoading || !chatInput.trim()}>
                 Send
               </button>
-            </form>
+            </div>
           </section>
         </main>
       </div>

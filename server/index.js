@@ -17,8 +17,16 @@ const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/pearedup';
 const VERIFICATION_TTL_MINUTES = Number(process.env.VERIFICATION_TTL_MINUTES || 15);
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+const CHAT_PROVIDER = process.env.CHAT_PROVIDER || 'nebula-first';
+const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434/api/generate';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3';
+const OLLAMA_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS || 0);
+const OLLAMA_NUM_PREDICT = Number(process.env.OLLAMA_NUM_PREDICT || 512);
+const NEBULA_API_KEY = process.env.NEBULA_API_KEY || '';
+const NEBULA_MODEL = process.env.NEBULA_MODEL || 'gemini-2.0-flash';
+const NEBULA_URL =
+  process.env.NEBULA_URL || `https://generativelanguage.googleapis.com/v1beta/models/${NEBULA_MODEL}:generateContent`;
+const NEBULA_TIMEOUT_MS = Number(process.env.NEBULA_TIMEOUT_MS || 10000);
 
 app.use(cors({ origin: CLIENT_ORIGIN }));
 app.use(express.json());
@@ -90,56 +98,123 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/chat/mentor', authenticate, async (req, res) => {
+async function generateWithNebula(prompt) {
+  if (!NEBULA_API_KEY) {
+    throw new Error('Nebula API key is not configured.');
+  }
+
+  const response = await fetch(`${NEBULA_URL}?key=${encodeURIComponent(NEBULA_API_KEY)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(NEBULA_TIMEOUT_MS),
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.4,
+        topP: 0.9,
+        maxOutputTokens: 220
+      }
+    })
+  });
+
+  const data = await response.json().catch(() => ({}));
+  const reply = data?.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('').trim();
+  if (!response.ok || !reply) {
+    const apiMessage = data?.error?.message || 'Nebula request failed.';
+    const apiStatus = data?.error?.status || '';
+    const err = new Error(apiMessage);
+    err.provider = 'nebula';
+    err.statusCode = response.status;
+    err.apiStatus = apiStatus;
+    throw err;
+  }
+
+  return reply;
+}
+
+async function generateWithOllama(prompt) {
+  const requestOptions = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: OLLAMA_MODEL,
+      prompt,
+      stream: false,
+      keep_alive: '15m',
+      options: {
+        num_predict: OLLAMA_NUM_PREDICT,
+        temperature: 0.4,
+        top_p: 0.9
+      }
+    })
+  };
+
+  if (OLLAMA_TIMEOUT_MS > 0) {
+    requestOptions.signal = AbortSignal.timeout(OLLAMA_TIMEOUT_MS);
+  }
+
+  const ollamaResponse = await fetch(OLLAMA_URL, requestOptions);
+
+  const data = await ollamaResponse.json().catch(() => ({}));
+  if (!ollamaResponse.ok || !data.response) {
+    throw new Error('Ollama request failed.');
+  }
+
+  return data.response;
+}
+
+app.post('/api/chat', authenticate, async (req, res) => {
+  const message = String(req.body?.message || '').trim();
+  const loweredMessage = message.toLowerCase();
+
+  if (!message) {
+    return res.status(400).json({ message: 'Message required.' });
+  }
+
+  if (loweredMessage.includes('how do i get a gf')) {
+    return res.json({ reply: "😂 HAHA don't make me laugh!" });
+  }
+
+  if (loweredMessage.includes('tell me a joke')) {
+    return res.json({ reply: 'Your life' });
+  }
+
+  const prompt = `You are Gala, a friendly AI assistant. Answer clearly.\nUser: ${message}\nGala:`;
+  const providers =
+    CHAT_PROVIDER === 'ollama-only'
+      ? ['ollama']
+      : CHAT_PROVIDER === 'nebula-only'
+        ? ['nebula']
+        : ['nebula', 'ollama'];
+
+  let lastError = 'No provider configured.';
+  let nebulaFailure = '';
   try {
-    if (!GEMINI_API_KEY) {
-      return res.status(500).json({ message: 'AI service is not configured. Set GEMINI_API_KEY in .env.' });
-    }
-
-    const message = String(req.body?.message || '').trim();
-    if (!message) {
-      return res.status(400).json({ message: 'Message is required.' });
-    }
-
-    const user = await User.findById(req.userId).select('email');
-    if (!user) {
-      return res.status(404).json({ message: 'User not found.' });
-    }
-
-    const prompt = [
-      'You are PearedUp Mentor, a concise and friendly study mentor.',
-      `Current student email: ${user.email}.`,
-      'Give practical, step-by-step help for studying.',
-      `Student message: ${message}`
-    ].join('\n');
-
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-    const geminiResponse = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.4,
-          maxOutputTokens: 500
+    for (const provider of providers) {
+      try {
+        const reply =
+          provider === 'nebula' ? await generateWithNebula(prompt) : await generateWithOllama(prompt);
+        const payload = { reply, provider };
+        if (provider === 'ollama' && nebulaFailure) {
+          payload.fallbackFrom = 'nebula';
+          payload.fallbackReason = nebulaFailure;
         }
-      })
-    });
-
-    const geminiData = await geminiResponse.json().catch(() => ({}));
-    if (!geminiResponse.ok) {
-      const errorMessage =
-        geminiData?.error?.message || 'AI request failed. Check model name and API key.';
-      return res.status(502).json({ message: errorMessage });
+        return res.json(payload);
+      } catch (error) {
+        lastError = error.message || `${provider} failed`;
+        if (provider === 'nebula') {
+          nebulaFailure = lastError;
+          console.warn('Nebula failed, fallback to Ollama:', lastError);
+        }
+      }
     }
-
-    const reply =
-      geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      'I could not generate a response. Please try again.';
-
-    return res.json({ reply });
-  } catch {
-    return res.status(500).json({ message: 'Failed to get AI response.' });
+    return res.status(502).json({ message: lastError });
+  } catch (error) {
+    if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
+      return res.status(504).json({ message: 'Gala timed out. Increase timeout or try again.' });
+    }
+    console.error('Ollama error:', error.message);
+    return res.status(500).json({ message: 'Something went wrong.' });
   }
 });
 
