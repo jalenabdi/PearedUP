@@ -142,6 +142,20 @@ app.get('/api/sections/search', authenticate, async (req, res) => {
   }
 
   try {
+    const nebulaGet = async (url) => {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          'x-api-key': NEBULA_DATA_API_KEY
+        },
+        signal: AbortSignal.timeout(NEBULA_TIMEOUT_MS)
+      });
+
+      const data = await response.json().catch(() => ({}));
+      return { response, data };
+    };
+
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(req.query || {})) {
       if (value === undefined || value === null || value === '') continue;
@@ -156,25 +170,82 @@ app.get('/api/sections/search', authenticate, async (req, res) => {
       }
     }
 
-    const url = `${NEBULA_DATA_BASE_URL}/section${params.toString() ? `?${params.toString()}` : ''}`;
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        'x-api-key': NEBULA_DATA_API_KEY
-      },
-      signal: AbortSignal.timeout(NEBULA_TIMEOUT_MS)
-    });
+    const subjectPrefix = String(req.query?.['course_details.subject_prefix'] || '').trim().toUpperCase();
+    const courseNumber = String(req.query?.['course_details.course_number'] || '').trim();
+    const sectionNumber = String(req.query?.section_number || '').trim();
+    const offsetValue = String(req.query?.offset || '').trim() || '0';
+    let rows = [];
+    let responseMeta = {};
 
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      return res.status(response.status).json({
-        message: data?.message || 'Failed to fetch sections from Nebula.',
-        status: data?.status || response.status
-      });
+    // Prefer course->sections endpoint when department + course number are provided.
+    if (subjectPrefix && courseNumber) {
+      const courseSectionParams = new URLSearchParams();
+      courseSectionParams.set('subject_prefix', subjectPrefix);
+      courseSectionParams.set('course_number', courseNumber);
+      courseSectionParams.set('former_offset', offsetValue);
+      courseSectionParams.set('latter_offset', '0');
+      const courseSectionUrl = `${NEBULA_DATA_BASE_URL}/course/sections?${courseSectionParams.toString()}`;
+      const { response: courseSectionResponse, data: courseSectionData } = await nebulaGet(courseSectionUrl);
+      if (courseSectionResponse.ok) {
+        rows = Array.isArray(courseSectionData?.data) ? courseSectionData.data : [];
+        responseMeta = courseSectionData || {};
+      }
     }
 
-    const rows = Array.isArray(data?.data) ? data.data : [];
+    // Fallback to direct section query path.
+    if (rows.length === 0) {
+      const directUrl = `${NEBULA_DATA_BASE_URL}/section${params.toString() ? `?${params.toString()}` : ''}`;
+      const { response, data } = await nebulaGet(directUrl);
+      if (!response.ok) {
+        return res.status(response.status).json({
+          message: data?.message || 'Failed to fetch sections from Nebula.',
+          status: data?.status || response.status
+        });
+      }
+      rows = Array.isArray(data?.data) ? data.data : [];
+      responseMeta = data || {};
+    }
+
+    // Fallback for course filtering if direct section query returns no rows.
+    if (rows.length === 0 && subjectPrefix && courseNumber) {
+      const courseParams = new URLSearchParams();
+      courseParams.set('subject_prefix', subjectPrefix);
+      courseParams.set('course_number', courseNumber);
+      const courseUrl = `${NEBULA_DATA_BASE_URL}/course?${courseParams.toString()}`;
+      const { response: courseResponse, data: courseData } = await nebulaGet(courseUrl);
+
+      if (courseResponse.ok) {
+        const courses = Array.isArray(courseData?.data) ? courseData.data : [];
+        const courseRefs = [...new Set(courses.map((course) => String(course?._id || '').trim()).filter(Boolean))];
+        if (courseRefs.length > 0) {
+          const fallbackRows = [];
+          for (const courseRef of courseRefs) {
+            const fallbackParams = new URLSearchParams();
+            fallbackParams.set('course_reference', courseRef);
+            if (offsetValue) fallbackParams.set('offset', offsetValue);
+            const sectionUrl = `${NEBULA_DATA_BASE_URL}/section?${fallbackParams.toString()}`;
+            const { response: sectionResponse, data: sectionData } = await nebulaGet(sectionUrl);
+            if (!sectionResponse.ok) continue;
+            const sectionRows = Array.isArray(sectionData?.data) ? sectionData.data : [];
+            fallbackRows.push(...sectionRows);
+          }
+          rows = fallbackRows;
+        }
+      }
+    }
+
+    if (sectionNumber) {
+      rows = rows.filter((section) => String(section?.section_number || '').trim() === sectionNumber);
+    }
+
+    const seenSectionKeys = new Set();
+    rows = rows.filter((section) => {
+      const key = section?._id || `${section?.section_number || ''}-${section?.internal_class_number || ''}`;
+      if (!key || seenSectionKeys.has(key)) return false;
+      seenSectionKeys.add(key);
+      return true;
+    });
+
     const objectIdPattern = /^[a-fA-F0-9]{24}$/;
 
     const enrichedData = rows.map((section) => {
@@ -223,7 +294,7 @@ app.get('/api/sections/search', authenticate, async (req, res) => {
     );
 
     return res.json({
-      ...data,
+      ...responseMeta,
       data: enrichedData
     });
   } catch (error) {
@@ -231,6 +302,83 @@ app.get('/api/sections/search', authenticate, async (req, res) => {
       return res.status(504).json({ message: 'Nebula sections request timed out.' });
     }
     return res.status(500).json({ message: 'Failed to fetch sections.' });
+  }
+});
+
+app.get('/api/clubs/search', authenticate, async (req, res) => {
+  if (!NEBULA_DATA_API_KEY) {
+    return res.status(500).json({ message: 'Nebula API key is not configured.' });
+  }
+
+  try {
+    const q = String(req.query?.q || '').trim();
+    if (!q) {
+      return res.status(400).json({ message: 'Query is required.' });
+    }
+
+    const params = new URLSearchParams({ q });
+    const url = `${NEBULA_DATA_BASE_URL}/club/search?${params.toString()}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'x-api-key': NEBULA_DATA_API_KEY
+      },
+      signal: AbortSignal.timeout(NEBULA_TIMEOUT_MS)
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return res.status(response.status).json({
+        message: data?.message || 'Failed to fetch clubs from Nebula.',
+        status: data?.status || response.status
+      });
+    }
+
+    return res.json(data);
+  } catch (error) {
+    if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
+      return res.status(504).json({ message: 'Nebula clubs request timed out.' });
+    }
+    return res.status(500).json({ message: 'Failed to fetch clubs.' });
+  }
+});
+
+app.get('/api/clubs/:id', authenticate, async (req, res) => {
+  if (!NEBULA_DATA_API_KEY) {
+    return res.status(500).json({ message: 'Nebula API key is not configured.' });
+  }
+
+  try {
+    const id = String(req.params?.id || '').trim();
+    if (!id) {
+      return res.status(400).json({ message: 'Club id is required.' });
+    }
+
+    const url = `${NEBULA_DATA_BASE_URL}/club/${encodeURIComponent(id)}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'x-api-key': NEBULA_DATA_API_KEY
+      },
+      signal: AbortSignal.timeout(NEBULA_TIMEOUT_MS)
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return res.status(response.status).json({
+        message: data?.message || 'Failed to fetch club details from Nebula.',
+        status: data?.status || response.status
+      });
+    }
+
+    return res.json(data);
+  } catch (error) {
+    if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
+      return res.status(504).json({ message: 'Nebula club request timed out.' });
+    }
+    return res.status(500).json({ message: 'Failed to fetch club.' });
   }
 });
 
@@ -316,6 +464,7 @@ async function generateWithOllama(prompt) {
 
 app.post('/api/chat', optionalAuthenticate, async (req, res) => {
   const message = String(req.body?.message || '').trim();
+  const attachments = Array.isArray(req.body?.attachments) ? req.body.attachments : [];
   const loweredMessage = message.toLowerCase();
 
   if (!message) {
@@ -330,7 +479,16 @@ app.post('/api/chat', optionalAuthenticate, async (req, res) => {
     return res.json({ reply: 'Your life' });
   }
 
-  const prompt = `You are Gala, a friendly AI assistant. Answer briefly and clearly.\nUser: ${message}\nGala:`;
+  const attachmentContext = attachments
+    .slice(0, 5)
+    .map((item) => {
+      const name = String(item?.name || 'file').slice(0, 120);
+      const type = String(item?.type || 'unknown').slice(0, 60);
+      const snippet = String(item?.textSnippet || '').slice(0, 1800).trim();
+      return `Attachment: ${name} (${type})${snippet ? `\nContent snippet:\n${snippet}` : ''}`;
+    })
+    .join('\n\n');
+  const prompt = `You are Gala, a friendly AI assistant. Answer briefly and clearly.\n${attachmentContext ? `${attachmentContext}\n\n` : ''}User: ${message}\nGala:`;
   const providers =
     CHAT_PROVIDER === 'nebula-only'
       ? ['nebula']
@@ -348,7 +506,7 @@ app.post('/api/chat', optionalAuthenticate, async (req, res) => {
       try {
         const reply =
           provider === 'nebula' ? await generateWithNebula(prompt) : await generateWithOllama(prompt);
-        const payload = { reply, provider };
+        const payload = { reply, provider: 'gala', engine: provider };
         if (provider === 'ollama' && nebulaFailure) {
           payload.fallbackFrom = 'nebula';
           payload.fallbackReason = nebulaFailure;
@@ -638,9 +796,48 @@ app.post('/api/connect/messages', authenticate, async (req, res) => {
   }
 });
 
+app.post('/api/profile', authenticate, async (req, res) => {
+  try {
+    const major = String(req.body?.major || '').trim().toUpperCase().slice(0, 20);
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    user.major = major;
+    await user.save();
+    return res.json({ message: 'Profile updated.', major: user.major });
+  } catch {
+    return res.status(500).json({ message: 'Failed to update profile.' });
+  }
+});
+
+app.post('/api/auth/delete-account', authenticate, async (req, res) => {
+  try {
+    const password = String(req.body?.password || '');
+    if (!password) {
+      return res.status(400).json({ message: 'Password is required.' });
+    }
+
+    const user = await User.findById(req.userId).select('passwordHash');
+    if (!user || !user.passwordHash) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Invalid password.' });
+    }
+
+    await ClassMessage.deleteMany({ senderId: req.userId });
+    await User.findByIdAndDelete(req.userId);
+
+    return res.json({ message: 'Account deleted.' });
+  } catch {
+    return res.status(500).json({ message: 'Failed to delete account.' });
+  }
+});
+
 app.get('/api/auth/me', authenticate, async (req, res) => {
   try {
-    const user = await User.findById(req.userId).select('email userType syllabusFoundation');
+    const user = await User.findById(req.userId).select('email userType major syllabusFoundation');
     if (!user) return res.status(404).json({ message: 'User not found' });
     return res.json({ user });
   } catch {

@@ -30,6 +30,10 @@ const userSchema = new mongoose.Schema(
       enum: ['student', 'non-student'],
       default: undefined
     },
+    major: {
+      type: String,
+      default: ''
+    },
     syllabusFoundation: {
       courseTitle: { type: String, default: '' },
       instructor: { type: String, default: '' },

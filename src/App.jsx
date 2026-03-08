@@ -2,6 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import logo from '../PearedUP-logo.png';
 import cometPear from '../Comet-Zoro-Pear.png';
 
+const DEPARTMENT_OPTIONS = [
+  'ACCT', 'AHST', 'ARTS', 'BBS', 'BCOM', 'BIOL', 'BLAW', 'CE', 'CHEM', 'CS', 'CRIM',
+  'DANC', 'ECON', 'ECE', 'ED', 'ENGR', 'FIN', 'GEOG', 'GOVT', 'HIST', 'HLTH', 'ISNS',
+  'ITSS', 'LIT', 'MATH', 'MECH', 'MKT', 'MUSI', 'NURS', 'OPRE', 'PHIL', 'PHYS', 'PSY',
+  'SE', 'SOC', 'SPAN'
+];
+
 const heroContent = {
   heroTitle: 'Drop your syllabus and get paired with people learning the same thing.',
   heroBody:
@@ -51,6 +58,7 @@ export default function App() {
   const [message, setMessage] = useState('');
   const [pearAngle, setPearAngle] = useState(0);
   const [chatInput, setChatInput] = useState('');
+  const [chatAttachments, setChatAttachments] = useState([]);
   const [chatLoading, setChatLoading] = useState(false);
   const [chatHistory, setChatHistory] = useState([
     { role: 'assistant', text: 'Hey, I am Gala. Ask me anything about your studying and classes.', provider: 'ready' }
@@ -59,11 +67,13 @@ export default function App() {
   const [subjectPrefixQuery, setSubjectPrefixQuery] = useState('');
   const [courseNumberQuery, setCourseNumberQuery] = useState('');
   const [professorLastNameQuery, setProfessorLastNameQuery] = useState('');
-  const [instructionModeQuery, setInstructionModeQuery] = useState('');
   const [sectionOffset, setSectionOffset] = useState('0');
   const [sectionLoading, setSectionLoading] = useState(false);
   const [sectionError, setSectionError] = useState('');
   const [sectionResults, setSectionResults] = useState([]);
+  const [clubsLoading, setClubsLoading] = useState(false);
+  const [clubsError, setClubsError] = useState('');
+  const [clubResults, setClubResults] = useState([]);
   const [syllabusCourseTitle, setSyllabusCourseTitle] = useState('');
   const [syllabusInstructor, setSyllabusInstructor] = useState('');
   const [syllabusText, setSyllabusText] = useState('');
@@ -80,10 +90,15 @@ export default function App() {
   const [motionPref, setMotionPref] = useState(localStorage.getItem('motion-pref') || 'smooth');
   const [dashboardStyle, setDashboardStyle] = useState(localStorage.getItem('dashboard-style') || 'glow');
   const [uiDensity, setUiDensity] = useState(localStorage.getItem('ui-density') || 'comfortable');
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteMessage, setDeleteMessage] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const chatEndRef = useRef(null);
   const transitionTimerRef = useRef(null);
   const pearCenterRef = useRef(null);
   const pearAngleRef = useRef(0);
+  const profileMenuRef = useRef(null);
 
   useEffect(() => {
     if (token) {
@@ -142,6 +157,17 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!profileMenuRef.current) return;
+      if (!profileMenuRef.current.contains(event.target)) {
+        setProfileMenuOpen(false);
+      }
+    };
+    window.addEventListener('pointerdown', handleClickOutside);
+    return () => window.removeEventListener('pointerdown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
     if (view !== 'student-welcome') {
       return;
     }
@@ -181,6 +207,7 @@ export default function App() {
     if (nextView === view) {
       return;
     }
+    setProfileMenuOpen(false);
     setIsViewTransitioning(true);
     if (transitionTimerRef.current) {
       window.clearTimeout(transitionTimerRef.current);
@@ -314,29 +341,144 @@ export default function App() {
     resetAuthFeedback();
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    setToken(null);
+    setUser(null);
+    setProfileMenuOpen(false);
+    switchView('home');
+  };
+
+  const handleUpdateMajor = async (majorValue) => {
+    if (!token) return;
+    const normalized = String(majorValue || '').trim().toUpperCase();
+    try {
+      await postJson('/api/profile', { major: normalized }, { Authorization: `Bearer ${token}` });
+      setUser((previous) => previous ? { ...previous, major: normalized } : previous);
+    } catch {
+      // Keep UI responsive even if profile write fails.
+    }
+  };
+
+  const rankClubsByMajor = (clubs, major) => {
+    const normalizedMajor = String(major || '').trim().toLowerCase();
+    return [...clubs].sort((a, b) => {
+      const getScore = (club) => {
+        if (!normalizedMajor) return 0;
+        const haystack = [
+          club?.name,
+          club?.description,
+          ...(Array.isArray(club?.tags) ? club.tags : [])
+        ].join(' ').toLowerCase();
+        if (!haystack) return 0;
+        if (haystack.includes(normalizedMajor)) return 3;
+        if (normalizedMajor === 'cs' && /(coding|code|software|computer|hack|program)/.test(haystack)) return 2;
+        if (normalizedMajor === 'ece' && /(electrical|hardware|robot|embedded|circuit)/.test(haystack)) return 2;
+        if (normalizedMajor === 'math' && /(math|analysis|actuary|statistics)/.test(haystack)) return 2;
+        return 1;
+      };
+      return getScore(b) - getScore(a);
+    });
+  };
+
+  const loadClubs = async () => {
+    if (!token) return;
+    setClubsLoading(true);
+    setClubsError('');
+    try {
+      const major = String(user?.major || subjectPrefixQuery || '').trim().toUpperCase();
+      const q = major || 'student';
+      const data = await getJson(`/api/clubs/search?q=${encodeURIComponent(q)}`, { Authorization: `Bearer ${token}` });
+      const clubs = Array.isArray(data?.data) ? data.data : [];
+      setClubResults(rankClubsByMajor(clubs, major));
+    } catch (error) {
+      setClubResults([]);
+      setClubsError(error.message || 'Failed to load clubs.');
+    } finally {
+      setClubsLoading(false);
+    }
+  };
+
+  const getProviderLabel = (_provider) => 'Gala';
+
+  const handleAttachFiles = async (event) => {
+    const files = Array.from(event.target.files || []).slice(0, 4);
+    const next = await Promise.all(files.map(async (file) => {
+      const isText = file.type.startsWith('text/') || /\.(txt|md|csv|json|js|ts|jsx|tsx)$/i.test(file.name);
+      let textSnippet = '';
+      if (isText) {
+        try {
+          const raw = await file.text();
+          textSnippet = raw.slice(0, 1800);
+        } catch {
+          textSnippet = '';
+        }
+      }
+      return {
+        name: file.name,
+        type: file.type || 'application/octet-stream',
+        size: file.size,
+        textSnippet
+      };
+    }));
+    setChatAttachments(next);
+    event.target.value = '';
+  };
+
+  const removeAttachment = (name) => {
+    setChatAttachments((previous) => previous.filter((item) => item.name !== name));
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!token) return;
+    if (!deletePassword.trim()) {
+      setDeleteMessage('Enter your password to confirm account deletion.');
+      return;
+    }
+    const confirmed = window.confirm('Are you sure you want to delete your account? This cannot be undone.');
+    if (!confirmed) return;
+    setDeletingAccount(true);
+    setDeleteMessage('');
+    try {
+      const headers = { Authorization: `Bearer ${token}` };
+      await postJson('/api/auth/delete-account', { password: deletePassword }, headers);
+      setDeletePassword('');
+      handleLogout();
+    } catch (error) {
+      setDeleteMessage(error.message || 'Failed to delete account.');
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
+
   const sendChatMessage = async () => {
     const trimmed = chatInput.trim();
     if (!trimmed || chatLoading) {
       return;
     }
 
-    const userMessage = { role: 'user', text: trimmed };
+    const userMessage = {
+      role: 'user',
+      text: trimmed,
+      attachments: chatAttachments.map((item) => item.name)
+    };
     setChatHistory((previous) => [...previous, userMessage]);
     setChatInput('');
     setChatLoading(true);
 
     try {
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const data = await postJson('/api/chat', { message: trimmed }, headers);
+      const data = await postJson('/api/chat', { message: trimmed, attachments: chatAttachments }, headers);
 
       setChatHistory((previous) => [
         ...previous,
         {
           role: 'assistant',
           text: data.reply || 'No reply from model.',
-          provider: data.fallbackFrom ? `${data.provider}-fallback` : (data.provider || 'unknown')
+          provider: data.provider || 'gala'
         }
       ]);
+      setChatAttachments([]);
     } catch (error) {
       setChatHistory((previous) => [
         ...previous,
@@ -355,12 +497,11 @@ export default function App() {
     const sectionNumber = sectionNumberQuery.trim();
     const subjectPrefix = subjectPrefixQuery.trim().toUpperCase();
     const courseNumber = courseNumberQuery.trim();
-    const professorLastName = professorLastNameQuery.trim();
-    const instructionMode = instructionModeQuery.trim();
+    const professorLastName = professorLastNameQuery.trim().toLowerCase();
     const offset = sectionOffset.trim() || '0';
 
-    if (!sectionNumber && !subjectPrefix && !courseNumber && !professorLastName) {
-      setSectionError('Enter at least one search field (section, course, or professor).');
+    if (!subjectPrefix || !courseNumber) {
+      setSectionError('Department and course number are required. Section # and professor are optional filters.');
       setSectionResults([]);
       return;
     }
@@ -369,12 +510,13 @@ export default function App() {
     setSectionError('');
 
     try {
+      if (subjectPrefix && subjectPrefix !== String(user?.major || '').toUpperCase()) {
+        handleUpdateMajor(subjectPrefix);
+      }
       const queryParts = new URLSearchParams();
       if (sectionNumber) queryParts.set('section_number', sectionNumber);
       if (subjectPrefix) queryParts.set('course_details.subject_prefix', subjectPrefix);
       if (courseNumber) queryParts.set('course_details.course_number', courseNumber);
-      if (professorLastName) queryParts.set('professor_details.last_name', professorLastName);
-      if (instructionMode) queryParts.set('instruction_mode', instructionMode);
       queryParts.set('offset', offset);
 
       const data = await getJson(
@@ -382,8 +524,11 @@ export default function App() {
         { Authorization: `Bearer ${token}` }
       );
       const rows = Array.isArray(data?.data) ? data.data : [];
-      setSectionResults(rows);
-      if (rows.length === 0) {
+      const filteredRows = professorLastName
+        ? rows.filter((section) => getProfessorNames(section).toLowerCase().includes(professorLastName))
+        : rows;
+      setSectionResults(filteredRows);
+      if (filteredRows.length === 0) {
         setSectionError('No matching sections found.');
       }
     } catch (error) {
@@ -517,6 +662,12 @@ export default function App() {
     };
   }, [view, token]);
 
+  useEffect(() => {
+    if (view === 'clubs' && token) {
+      loadClubs();
+    }
+  }, [view, token, user?.major]);
+
   const getCourseHeader = (section) => {
     const course = section?.course_details?.[0];
     if (!course) return section.section_number || 'Section';
@@ -573,6 +724,39 @@ export default function App() {
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([building, room, 'UT Dallas'].filter(Boolean).join(' '))}`;
   };
 
+  const profileMenu = (
+    <div className="profile-menu-wrap" ref={profileMenuRef}>
+      <button
+        type="button"
+        className="ghost-btn profile-trigger"
+        onClick={() => setProfileMenuOpen((current) => !current)}
+      >
+        Profile
+      </button>
+      {profileMenuOpen && (
+        <div className="profile-menu">
+          <button
+            type="button"
+            className="profile-menu-item"
+            onClick={() => {
+              setProfileMenuOpen(false);
+              switchView('settings');
+            }}
+          >
+            Profile Settings
+          </button>
+          <button
+            type="button"
+            className="profile-menu-item logout-item"
+            onClick={handleLogout}
+          >
+            Logout
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   if (view === 'user-type') {
     return (
       <div className={`${shellClass} auth-shell`}>
@@ -608,18 +792,9 @@ export default function App() {
               <div className="dashboard-status-card">
                 <p><strong>Status:</strong> {dashboardDetectionStatus === 'detected' ? 'Class Detected' : 'Awaiting Syllabus'}</p>
                 <p><strong>Class:</strong> {dashboardDetectedClass}</p>
+                <p><strong>Major:</strong> {user?.major || 'Not set'}</p>
               </div>
-              <button
-                className="ghost-btn"
-                onClick={() => {
-                  localStorage.removeItem('token');
-                  setToken(null);
-                  setUser(null);
-                  switchView('home');
-                }}
-              >
-                Logout
-              </button>
+              {profileMenu}
             </div>
           </nav>
         </header>
@@ -666,11 +841,11 @@ export default function App() {
             </button>
             <button
               className="feature-btn pos-left tone-sky"
-              onClick={() => switchView('settings')}
+              onClick={() => switchView('clubs')}
             >
-              <div className="btn-icon">⚙️</div>
-              <h3>Settings</h3>
-              <p>Adjust your workspace vibe</p>
+              <div className="btn-icon">🏛️</div>
+              <h3>Clubs</h3>
+              <p>Find clubs by your major</p>
             </button>
             <div className="button-center-pear" aria-hidden="true" ref={pearCenterRef}>
               <span className="pear-glyph" style={{ transform: `rotate(${pearAngle}deg)` }}>🍐</span>
@@ -692,9 +867,12 @@ export default function App() {
                 <h1>PearedUp</h1>
               </div>
             </div>
-            <button className="ghost-btn" onClick={() => switchView('student-welcome')}>
-              Back
-            </button>
+            <div className="top-right-controls">
+              <button className="ghost-btn" onClick={() => switchView('student-welcome')}>
+                Back
+              </button>
+              {profileMenu}
+            </div>
           </nav>
         </header>
 
@@ -788,6 +966,112 @@ export default function App() {
                 </button>
               </div>
             </div>
+
+            <div className="settings-row">
+              <div>
+                <h3>Major</h3>
+                <p className="muted">Used to rank clubs and personalize recommendations.</p>
+              </div>
+              <div className="settings-options">
+                <select
+                  className="major-select"
+                  value={String(user?.major || '')}
+                  onChange={(event) => handleUpdateMajor(event.target.value)}
+                >
+                  <option value="">Select major/department</option>
+                  {DEPARTMENT_OPTIONS.map((department) => (
+                    <option key={department} value={department}>{department}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="settings-row danger-row">
+              <div>
+                <h3>Delete Account</h3>
+                <p className="muted">This removes your account and class chat messages permanently.</p>
+              </div>
+              <div className="settings-options delete-account-controls">
+                <input
+                  type="password"
+                  placeholder="Confirm password"
+                  value={deletePassword}
+                  onChange={(event) => setDeletePassword(event.target.value)}
+                />
+                <button
+                  type="button"
+                  className="ghost-btn delete-btn"
+                  onClick={handleDeleteAccount}
+                  disabled={deletingAccount}
+                >
+                  {deletingAccount ? 'Deleting...' : 'Delete Account'}
+                </button>
+              </div>
+            </div>
+            {deleteMessage && <p className="section-error">{deleteMessage}</p>}
+          </section>
+        </main>
+      </div>
+    );
+  }
+
+  if (view === 'clubs') {
+    return (
+      <div className={shellClass}>
+        <header className="hero">
+          <nav className="top-nav">
+            <div className="brand">
+              <img src={logo} alt="PearedUp logo" className="logo-img" />
+              <div>
+                <h1>PearedUp</h1>
+              </div>
+            </div>
+            <div className="top-right-controls">
+              <button className="ghost-btn" onClick={() => switchView('student-welcome')}>
+                Back
+              </button>
+              {profileMenu}
+            </div>
+          </nav>
+        </header>
+
+        <main className="connect-main">
+          <section className="panel settings-card clubs-card">
+            <p className="eyebrow">Campus Clubs</p>
+            <h2>Clubs For {user?.major || 'Your Major'}</h2>
+            <p className="muted">Results are ranked by your major profile. Update major in Profile Settings or by searching sections.</p>
+            <div className="clubs-refresh-row">
+              <button className="primary-btn" type="button" onClick={loadClubs} disabled={clubsLoading}>
+                {clubsLoading ? 'Refreshing...' : 'Refresh Clubs'}
+              </button>
+            </div>
+            {clubsError && <p className="section-error">{clubsError}</p>}
+            <div className="clubs-grid">
+              {clubsLoading ? (
+                <p className="muted">Loading clubs...</p>
+              ) : clubResults.length === 0 ? (
+                <p className="muted">No clubs found yet for this major search.</p>
+              ) : (
+                clubResults.map((club) => (
+                  <article key={club.id || club.slug || club.name} className="club-item">
+                    <h3>{club.name || 'Club'}</h3>
+                    <p>{club.description || 'No description available.'}</p>
+                    {Array.isArray(club.tags) && club.tags.length > 0 && (
+                      <p className="muted">Tags: {club.tags.join(', ')}</p>
+                    )}
+                    {Array.isArray(club.contacts) && club.contacts.length > 0 && (
+                      <div className="section-links">
+                        {club.contacts.slice(0, 3).map((contact, index) => (
+                          contact?.url
+                            ? <a key={`${contact.platform || 'link'}-${index}`} href={contact.url} target="_blank" rel="noreferrer">{contact.platform || 'Contact'}</a>
+                            : null
+                        ))}
+                      </div>
+                    )}
+                  </article>
+                ))
+              )}
+            </div>
           </section>
         </main>
       </div>
@@ -805,9 +1089,12 @@ export default function App() {
                 <h1>PearedUp</h1>
               </div>
             </div>
-            <button className="ghost-btn" onClick={() => switchView('student-welcome')}>
-              Back
-            </button>
+            <div className="top-right-controls">
+              <button className="ghost-btn" onClick={() => switchView('student-welcome')}>
+                Back
+              </button>
+              {profileMenu}
+            </div>
           </nav>
         </header>
 
@@ -887,9 +1174,12 @@ export default function App() {
                 <h1>PearedUp</h1>
               </div>
             </div>
-            <button className="ghost-btn" onClick={() => switchView('student-welcome')}>
-              Back
-            </button>
+            <div className="top-right-controls">
+              <button className="ghost-btn" onClick={() => switchView('student-welcome')}>
+                Back
+              </button>
+              {profileMenu}
+            </div>
           </nav>
         </header>
 
@@ -957,9 +1247,12 @@ export default function App() {
                 <h1>PearedUp</h1>
               </div>
             </div>
-            <button className="ghost-btn" onClick={() => switchView('student-welcome')}>
-              Back
-            </button>
+            <div className="top-right-controls">
+              <button className="ghost-btn" onClick={() => switchView('student-welcome')}>
+                Back
+              </button>
+              {profileMenu}
+            </div>
           </nav>
         </header>
 
@@ -980,7 +1273,7 @@ export default function App() {
               <p>Comet mode active for peak study energy.</p>
             </div>
             <div className="chat-metrics">
-              <span className="metric-pill">Dual Engine: Nebula + Ollama</span>
+              <span className="metric-pill">Gala Smart Routing: Nebula + Ollama</span>
               <span className="metric-pill">Hit Enter to send fast</span>
             </div>
             <div className="quick-prompts">
@@ -998,8 +1291,11 @@ export default function App() {
               {chatHistory.map((entry, index) => (
                 <div key={`${entry.role}-${index}`} className={`chat-bubble ${entry.role}`}>
                   {entry.text}
+                  {entry.role === 'user' && Array.isArray(entry.attachments) && entry.attachments.length > 0 && (
+                    <p className="chat-attachments-text">Attached: {entry.attachments.join(', ')}</p>
+                  )}
                   {entry.role === 'assistant' && entry.provider && (
-                    <span className={`provider-tag ${entry.provider}`}>{entry.provider}</span>
+                    <span className={`provider-tag ${entry.provider}`}>{getProviderLabel(entry.provider)}</span>
                   )}
                 </div>
               ))}
@@ -1019,53 +1315,65 @@ export default function App() {
                   }
                 }}
               />
+              <label className="ghost-btn attach-btn" htmlFor="chat-attach-input">
+                Attach
+              </label>
+              <input id="chat-attach-input" type="file" multiple onChange={handleAttachFiles} className="hidden-file-input" />
               <button className="primary-btn" onClick={sendChatMessage} disabled={chatLoading || !chatInput.trim()}>
                 Send
               </button>
             </div>
+            {chatAttachments.length > 0 && (
+              <div className="attachment-chip-row">
+                {chatAttachments.map((item) => (
+                  <button key={item.name} type="button" className="attachment-chip" onClick={() => removeAttachment(item.name)}>
+                    {item.name} ✕
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div className="section-search-card">
               <img src={cometPear} alt="Comet Zoro Pear" className="section-comet-pear" />
               <p className="eyebrow">Nebula Sections</p>
               <h3>Find Class & Syllabus Info</h3>
               <p className="section-helper">
-                Search by section number, course code, or professor last name. Use any mix of fields.
+                Department and course number are required. Section # and professor are optional and help refine results.
               </p>
               <div className="offset-guide">
                 <span className="offset-chip">Offset Tip</span>
                 <span><strong>0</strong> = first page of results, <strong>10</strong> = skip first 10 matches.</span>
               </div>
               <div className="section-search-controls">
-                <input
-                  type="text"
-                  placeholder="Section number (e.g. 001)"
-                  value={sectionNumberQuery}
-                  onChange={(event) => setSectionNumberQuery(event.target.value)}
-                />
-                <input
-                  type="text"
-                  placeholder="Subject (e.g. CS)"
+                <select
                   value={subjectPrefixQuery}
                   onChange={(event) => setSubjectPrefixQuery(event.target.value)}
-                />
+                >
+                  <option value="">Department / Major (select)</option>
+                  {DEPARTMENT_OPTIONS.map((department) => (
+                    <option key={department} value={department}>{department}</option>
+                  ))}
+                </select>
                 <input
                   type="text"
                   placeholder="Course number (e.g. 1337)"
                   value={courseNumberQuery}
                   onChange={(event) => setCourseNumberQuery(event.target.value)}
                 />
-                <input
-                  type="text"
-                  placeholder="Professor last name"
-                  value={professorLastNameQuery}
-                  onChange={(event) => setProfessorLastNameQuery(event.target.value)}
-                />
-                <input
-                  type="text"
-                  placeholder="Instruction mode (optional)"
-                  value={instructionModeQuery}
-                  onChange={(event) => setInstructionModeQuery(event.target.value)}
-                />
+                <div className="optional-pair">
+                  <input
+                    type="text"
+                    placeholder="Section # (optional, e.g. 001)"
+                    value={sectionNumberQuery}
+                    onChange={(event) => setSectionNumberQuery(event.target.value)}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Professor last name (optional)"
+                    value={professorLastNameQuery}
+                    onChange={(event) => setProfessorLastNameQuery(event.target.value)}
+                  />
+                </div>
                 <div className="offset-field">
                   <input
                     type="number"
