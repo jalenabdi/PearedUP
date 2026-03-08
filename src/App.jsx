@@ -94,6 +94,8 @@ export default function App() {
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteMessage, setDeleteMessage] = useState('');
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [majorSaving, setMajorSaving] = useState(false);
+  const [majorMessage, setMajorMessage] = useState('');
   const chatEndRef = useRef(null);
   const transitionTimerRef = useRef(null);
   const pearCenterRef = useRef(null);
@@ -352,11 +354,17 @@ export default function App() {
   const handleUpdateMajor = async (majorValue) => {
     if (!token) return;
     const normalized = String(majorValue || '').trim().toUpperCase();
+    setMajorSaving(true);
+    setMajorMessage('');
     try {
-      await postJson('/api/profile', { major: normalized }, { Authorization: `Bearer ${token}` });
-      setUser((previous) => previous ? { ...previous, major: normalized } : previous);
-    } catch {
-      // Keep UI responsive even if profile write fails.
+      const data = await postJson('/api/profile', { major: normalized }, { Authorization: `Bearer ${token}` });
+      const nextMajor = String(data?.major || normalized).toUpperCase();
+      setUser((previous) => previous ? { ...previous, major: nextMajor } : previous);
+      setMajorMessage('Major saved.');
+    } catch (error) {
+      setMajorMessage(error.message || 'Failed to save major.');
+    } finally {
+      setMajorSaving(false);
     }
   };
 
@@ -808,6 +816,7 @@ export default function App() {
             <div className="dashboard-meta">
               <span className="meta-chip">Focus Mode: Active</span>
               <span className="meta-chip">AI Mentor: Ready</span>
+              <span className="meta-chip">Major: {user?.major || 'Not set'}</span>
               <span className="meta-chip">Theme: {theme === 'dark' ? 'Dark' : 'Light'}</span>
               <span className="meta-chip">Motion: {motionPref === 'smooth' ? 'Smooth' : 'Reduced'}</span>
             </div>
@@ -976,6 +985,7 @@ export default function App() {
                 <select
                   className="major-select"
                   value={String(user?.major || '')}
+                  disabled={majorSaving}
                   onChange={(event) => handleUpdateMajor(event.target.value)}
                 >
                   <option value="">Select major/department</option>
@@ -985,6 +995,7 @@ export default function App() {
                 </select>
               </div>
             </div>
+            {majorMessage && <p className="major-message">{majorMessage}</p>}
 
             <div className="settings-row danger-row">
               <div>

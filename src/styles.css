@@ -1490,6 +1490,22 @@ button:disabled {
   font-family: inherit;
 }
 
+.major-select,
+.major-select option {
+  color: #fff;
+}
+
+.major-select option {
+  color: #111;
+  background: #fff;
+}
+
+.major-message {
+  margin-top: 0.55rem;
+  color: var(--mint);
+  font-weight: 600;
+}
+
 .danger-row {
   border-color: rgba(255, 84, 84, 0.38);
   background: rgba(255, 84, 84, 0.06);
