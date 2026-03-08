@@ -118,6 +118,31 @@ p {
   gap: 1rem;
 }
 
+.dashboard-top-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.dashboard-status-card {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 0.45rem 0.65rem;
+  min-width: 250px;
+  text-align: left;
+  box-shadow: var(--shadow);
+}
+
+.dashboard-status-card p {
+  font-size: 0.78rem;
+  color: var(--ink);
+}
+
+.dashboard-status-card p + p {
+  margin-top: 0.2rem;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -342,6 +367,16 @@ button:disabled {
 
   .top-nav {
     flex-wrap: wrap;
+  }
+
+  .dashboard-top-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .dashboard-status-card {
+    min-width: 0;
+    flex: 1;
   }
 }
 
@@ -1122,6 +1157,182 @@ button:disabled {
   padding: 0 1.5rem;
 }
 
+.connect-main {
+  max-width: 1040px;
+  margin: 2rem auto 0;
+  padding: 0 1.5rem;
+}
+
+.connect-card {
+  padding: 1.2rem;
+}
+
+.connect-error {
+  margin-top: 0.7rem;
+  color: #ffb7b7;
+}
+
+.connect-layout {
+  margin-top: 0.9rem;
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 0.9rem;
+}
+
+.connect-classmates,
+.connect-chat {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.8rem;
+}
+
+.connect-classmates ul {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.connect-classmates li {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.45rem 0.55rem;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.connect-messages {
+  margin-top: 0.7rem;
+  min-height: 260px;
+  max-height: 380px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding-right: 0.2rem;
+}
+
+.connect-message {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.5rem 0.65rem;
+  background: rgba(255, 255, 255, 0.05);
+  max-width: 88%;
+}
+
+.connect-message.mine {
+  align-self: flex-end;
+  background: rgba(255, 205, 111, 0.2);
+  border-color: rgba(255, 205, 111, 0.42);
+}
+
+.connect-message-meta {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+
+.connect-input-row {
+  margin-top: 0.7rem;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.55rem;
+}
+
+.connect-input-row input {
+  width: 100%;
+  padding: 0.72rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+  font-family: inherit;
+}
+
+.syllabus-main {
+  max-width: 960px;
+  margin: 2rem auto 0;
+  padding: 0 1.5rem;
+}
+
+.syllabus-card {
+  padding: 1.2rem;
+}
+
+.syllabus-card h2 {
+  margin-top: 0.35rem;
+}
+
+.syllabus-grid {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8rem;
+}
+
+.syllabus-grid label,
+.syllabus-text-label {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.syllabus-grid input,
+.syllabus-text-label textarea {
+  width: 100%;
+  padding: 0.72rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.98rem;
+}
+
+.syllabus-text-label {
+  margin-top: 0.85rem;
+}
+
+.syllabus-text-label textarea {
+  resize: vertical;
+  min-height: 180px;
+}
+
+.syllabus-row {
+  margin-top: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.syllabus-badge {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 0.32rem 0.7rem;
+  border: 1px solid var(--border);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.72rem;
+}
+
+.syllabus-badge.not-started {
+  color: var(--muted);
+}
+
+.syllabus-badge.detected {
+  color: var(--mint);
+  border-color: rgba(107, 211, 176, 0.6);
+}
+
+.syllabus-message {
+  margin-top: 0.85rem;
+  color: var(--muted);
+}
+
 .settings-card {
   padding: 1.2rem;
 }
@@ -1290,6 +1501,18 @@ button:disabled {
   .option-btn {
     flex: 1;
     text-align: center;
+  }
+
+  .syllabus-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .connect-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .connect-input-row {
+    grid-template-columns: 1fr;
   }
 }
 

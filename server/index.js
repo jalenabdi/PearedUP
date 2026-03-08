@@ -8,6 +8,7 @@ import nodemailer from 'nodemailer';
 import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
 import User from './models/User.js';
+import ClassMessage from './models/ClassMessage.js';
 
 dotenv.config();
 
@@ -25,6 +26,8 @@ const OLLAMA_NUM_PREDICT = Number(process.env.OLLAMA_NUM_PREDICT || 220);
 const OLLAMA_NUM_CTX = Number(process.env.OLLAMA_NUM_CTX || 2048);
 const OLLAMA_NUM_THREAD = Number(process.env.OLLAMA_NUM_THREAD || 8);
 const NEBULA_API_KEY = process.env.NEBULA_API_KEY || '';
+const NEBULA_GENERATIVE_API_KEY = process.env.NEBULA_GENERATIVE_API_KEY || NEBULA_API_KEY;
+const NEBULA_DATA_API_KEY = process.env.NEBULA_DATA_API_KEY || NEBULA_API_KEY;
 const NEBULA_MODEL = process.env.NEBULA_MODEL || 'gemini-2.0-flash';
 const NEBULA_URL =
   process.env.NEBULA_URL || `https://generativelanguage.googleapis.com/v1beta/models/${NEBULA_MODEL}:generateContent`;
@@ -75,6 +78,22 @@ const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 const hashCode = (code) => crypto.createHash('sha256').update(code).digest('hex');
 const createVerificationCode = () => String(Math.floor(100000 + Math.random() * 900000));
 
+const detectClassFromSyllabus = (courseTitle = '', rawText = '') => {
+  const text = `${courseTitle} ${rawText}`.toLowerCase();
+  if (!text.trim()) return '';
+  if (/computer science|programming|python|java|javascript|data structure|algorithm|software/.test(text)) return 'Computer Science';
+  if (/calculus|algebra|geometry|statistics|trigonometry|math/.test(text)) return 'Mathematics';
+  if (/biology|genetics|anatomy|physiology|ecology|cell/.test(text)) return 'Biology';
+  if (/chemistry|organic chemistry|stoichiometry|molecule|reaction/.test(text)) return 'Chemistry';
+  if (/physics|mechanics|thermodynamics|electromagnet|kinematics/.test(text)) return 'Physics';
+  if (/economics|microeconomics|macroeconomics|finance|accounting/.test(text)) return 'Economics';
+  if (/history|historical|civilization|war studies/.test(text)) return 'History';
+  if (/english|literature|composition|creative writing/.test(text)) return 'English';
+  return '';
+};
+
+const toClassKey = (value = '') => String(value || '').trim().toLowerCase();
+
 let transporter;
 
 function getTransporter() {
@@ -118,7 +137,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.get('/api/sections/search', authenticate, async (req, res) => {
-  if (!NEBULA_API_KEY) {
+  if (!NEBULA_DATA_API_KEY) {
     return res.status(500).json({ message: 'Nebula API key is not configured.' });
   }
 
@@ -142,7 +161,7 @@ app.get('/api/sections/search', authenticate, async (req, res) => {
       method: 'GET',
       headers: {
         Accept: 'application/json',
-        'x-api-key': NEBULA_API_KEY
+        'x-api-key': NEBULA_DATA_API_KEY
       },
       signal: AbortSignal.timeout(NEBULA_TIMEOUT_MS)
     });
@@ -184,7 +203,7 @@ app.get('/api/sections/search', authenticate, async (req, res) => {
             method: 'GET',
             headers: {
               Accept: 'application/json',
-              'x-api-key': NEBULA_API_KEY
+              'x-api-key': NEBULA_DATA_API_KEY
             },
             signal: AbortSignal.timeout(NEBULA_TIMEOUT_MS)
           });
@@ -216,7 +235,7 @@ app.get('/api/sections/search', authenticate, async (req, res) => {
 });
 
 async function generateWithNebula(prompt) {
-  if (!NEBULA_API_KEY) {
+  if (!NEBULA_GENERATIVE_API_KEY) {
     throw new Error('Nebula API key is not configured.');
   }
 
@@ -224,8 +243,8 @@ async function generateWithNebula(prompt) {
     method: NEBULA_METHOD,
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': NEBULA_API_KEY,
-      'x-goog-api-key': NEBULA_API_KEY
+      'x-api-key': NEBULA_GENERATIVE_API_KEY,
+      'x-goog-api-key': NEBULA_GENERATIVE_API_KEY
     },
     signal: AbortSignal.timeout(NEBULA_TIMEOUT_MS)
   };
@@ -499,9 +518,129 @@ app.post('/api/auth/set-user-type', authenticate, async (req, res) => {
   }
 });
 
+app.get('/api/syllabus/foundation', authenticate, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId).select('syllabusFoundation');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    return res.json({
+      foundation: user.syllabusFoundation || {
+        courseTitle: '',
+        instructor: '',
+        rawText: '',
+        detectedClass: '',
+        detectionStatus: 'not-started',
+        lastUpdatedAt: null
+      }
+    });
+  } catch {
+    return res.status(500).json({ message: 'Failed to load syllabus foundation.' });
+  }
+});
+
+app.post('/api/syllabus/foundation', authenticate, async (req, res) => {
+  try {
+    const courseTitle = String(req.body?.courseTitle || '').trim().slice(0, 140);
+    const instructor = String(req.body?.instructor || '').trim().slice(0, 140);
+    const rawText = String(req.body?.rawText || '').trim().slice(0, 20000);
+
+    if (!courseTitle && !rawText) {
+      return res.status(400).json({ message: 'Please provide course title or syllabus text.' });
+    }
+
+    const detectedClass = detectClassFromSyllabus(courseTitle, rawText);
+    const detectionStatus = detectedClass ? 'detected' : 'not-started';
+
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    user.syllabusFoundation = {
+      courseTitle,
+      instructor,
+      rawText,
+      detectedClass,
+      detectionStatus,
+      lastUpdatedAt: new Date()
+    };
+
+    await user.save();
+    return res.json({ message: 'Syllabus foundation saved.', foundation: user.syllabusFoundation });
+  } catch {
+    return res.status(500).json({ message: 'Failed to save syllabus foundation.' });
+  }
+});
+
+app.get('/api/connect/classmates', authenticate, async (req, res) => {
+  try {
+    const me = await User.findById(req.userId).select('syllabusFoundation.detectedClass');
+    if (!me) return res.status(404).json({ message: 'User not found' });
+
+    const detectedClass = String(me?.syllabusFoundation?.detectedClass || '').trim();
+    if (!detectedClass) {
+      return res.status(400).json({ message: 'No class detected yet. Save your syllabus first.' });
+    }
+
+    const classmates = await User.find({
+      _id: { $ne: req.userId },
+      userType: 'student',
+      'syllabusFoundation.detectedClass': detectedClass
+    }).select('email userType syllabusFoundation.detectedClass updatedAt');
+
+    return res.json({ detectedClass, classmates });
+  } catch {
+    return res.status(500).json({ message: 'Failed to load classmates.' });
+  }
+});
+
+app.get('/api/connect/messages', authenticate, async (req, res) => {
+  try {
+    const me = await User.findById(req.userId).select('syllabusFoundation.detectedClass');
+    if (!me) return res.status(404).json({ message: 'User not found' });
+
+    const detectedClass = String(me?.syllabusFoundation?.detectedClass || '').trim();
+    if (!detectedClass) {
+      return res.status(400).json({ message: 'No class detected yet. Save your syllabus first.' });
+    }
+
+    const classKey = toClassKey(detectedClass);
+    const messages = await ClassMessage.find({ classKey }).sort({ createdAt: 1 }).limit(120);
+    return res.json({ detectedClass, messages });
+  } catch {
+    return res.status(500).json({ message: 'Failed to load class messages.' });
+  }
+});
+
+app.post('/api/connect/messages', authenticate, async (req, res) => {
+  try {
+    const text = String(req.body?.text || '').trim();
+    if (!text) {
+      return res.status(400).json({ message: 'Message text is required.' });
+    }
+
+    const me = await User.findById(req.userId).select('email syllabusFoundation.detectedClass');
+    if (!me) return res.status(404).json({ message: 'User not found' });
+
+    const detectedClass = String(me?.syllabusFoundation?.detectedClass || '').trim();
+    if (!detectedClass) {
+      return res.status(400).json({ message: 'No class detected yet. Save your syllabus first.' });
+    }
+
+    const classKey = toClassKey(detectedClass);
+    const messageItem = await ClassMessage.create({
+      classKey,
+      senderId: me._id,
+      senderEmail: me.email,
+      text: text.slice(0, 600)
+    });
+
+    return res.status(201).json({ messageItem });
+  } catch {
+    return res.status(500).json({ message: 'Failed to send class message.' });
+  }
+});
+
 app.get('/api/auth/me', authenticate, async (req, res) => {
   try {
-    const user = await User.findById(req.userId).select('email userType');
+    const user = await User.findById(req.userId).select('email userType syllabusFoundation');
     if (!user) return res.status(404).json({ message: 'User not found' });
     return res.json({ user });
   } catch {

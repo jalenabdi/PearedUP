@@ -64,6 +64,18 @@ export default function App() {
   const [sectionLoading, setSectionLoading] = useState(false);
   const [sectionError, setSectionError] = useState('');
   const [sectionResults, setSectionResults] = useState([]);
+  const [syllabusCourseTitle, setSyllabusCourseTitle] = useState('');
+  const [syllabusInstructor, setSyllabusInstructor] = useState('');
+  const [syllabusText, setSyllabusText] = useState('');
+  const [syllabusDetectedClass, setSyllabusDetectedClass] = useState('');
+  const [syllabusDetectionStatus, setSyllabusDetectionStatus] = useState('not-started');
+  const [syllabusLoading, setSyllabusLoading] = useState(false);
+  const [syllabusMessage, setSyllabusMessage] = useState('');
+  const [connectLoading, setConnectLoading] = useState(false);
+  const [connectError, setConnectError] = useState('');
+  const [connectClassmates, setConnectClassmates] = useState([]);
+  const [connectMessages, setConnectMessages] = useState([]);
+  const [connectInput, setConnectInput] = useState('');
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
   const [motionPref, setMotionPref] = useState(localStorage.getItem('motion-pref') || 'smooth');
   const [dashboardStyle, setDashboardStyle] = useState(localStorage.getItem('dashboard-style') || 'glow');
@@ -180,6 +192,8 @@ export default function App() {
   };
 
   const shellClass = `page-shell ${isViewTransitioning ? 'page-transition-out' : 'page-transition-in'}`;
+  const dashboardDetectedClass = user?.syllabusFoundation?.detectedClass || syllabusDetectedClass || 'Not detected yet';
+  const dashboardDetectionStatus = user?.syllabusFoundation?.detectionStatus || syllabusDetectionStatus;
 
   const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
@@ -380,6 +394,129 @@ export default function App() {
     }
   };
 
+  const loadSyllabusFoundation = async () => {
+    if (!token) return;
+    setSyllabusLoading(true);
+    setSyllabusMessage('');
+    try {
+      const data = await getJson('/api/syllabus/foundation', { Authorization: `Bearer ${token}` });
+      const foundation = data?.foundation || {};
+      setSyllabusCourseTitle(foundation.courseTitle || '');
+      setSyllabusInstructor(foundation.instructor || '');
+      setSyllabusText(foundation.rawText || '');
+      setSyllabusDetectedClass(foundation.detectedClass || '');
+      setSyllabusDetectionStatus(foundation.detectionStatus || 'not-started');
+      setUser((previous) => {
+        if (!previous) return previous;
+        return { ...previous, syllabusFoundation: foundation };
+      });
+    } catch (error) {
+      setSyllabusMessage(error.message || 'Failed to load syllabus foundation.');
+    } finally {
+      setSyllabusLoading(false);
+    }
+  };
+
+  const saveSyllabusFoundation = async () => {
+    if (!token) {
+      setSyllabusMessage('Please log in again.');
+      return;
+    }
+    if (!syllabusCourseTitle.trim() && !syllabusText.trim()) {
+      setSyllabusMessage('Please add a course title or syllabus text.');
+      return;
+    }
+
+    setSyllabusLoading(true);
+    setSyllabusMessage('');
+    try {
+      const data = await postJson(
+        '/api/syllabus/foundation',
+        {
+          courseTitle: syllabusCourseTitle,
+          instructor: syllabusInstructor,
+          rawText: syllabusText
+        },
+        { Authorization: `Bearer ${token}` }
+      );
+      const foundation = data?.foundation || {};
+      setSyllabusDetectedClass(foundation.detectedClass || '');
+      setSyllabusDetectionStatus(foundation.detectionStatus || 'not-started');
+      setUser((previous) => {
+        if (!previous) return previous;
+        return { ...previous, syllabusFoundation: foundation };
+      });
+      setSyllabusMessage(data?.message || 'Syllabus foundation saved.');
+    } catch (error) {
+      setSyllabusMessage(error.message || 'Failed to save syllabus foundation.');
+    } finally {
+      setSyllabusLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (view === 'syllabus' && token) {
+      loadSyllabusFoundation();
+    }
+  }, [view, token]);
+
+  const loadConnectData = async () => {
+    if (!token) {
+      return;
+    }
+    setConnectLoading(true);
+    setConnectError('');
+    try {
+      const headers = { Authorization: `Bearer ${token}` };
+      const [classmatesResponse, messagesResponse] = await Promise.all([
+        getJson('/api/connect/classmates', headers),
+        getJson('/api/connect/messages', headers)
+      ]);
+
+      setConnectClassmates(Array.isArray(classmatesResponse?.classmates) ? classmatesResponse.classmates : []);
+      setConnectMessages(Array.isArray(messagesResponse?.messages) ? messagesResponse.messages : []);
+    } catch (error) {
+      setConnectError(error.message || 'Failed to load connect data.');
+      setConnectClassmates([]);
+      setConnectMessages([]);
+    } finally {
+      setConnectLoading(false);
+    }
+  };
+
+  const sendConnectMessage = async () => {
+    const trimmed = connectInput.trim();
+    if (!trimmed || !token) {
+      return;
+    }
+
+    try {
+      const headers = { Authorization: `Bearer ${token}` };
+      const data = await postJson('/api/connect/messages', { text: trimmed }, headers);
+      if (data?.messageItem) {
+        setConnectMessages((previous) => [...previous, data.messageItem]);
+      }
+      setConnectInput('');
+    } catch (error) {
+      setConnectError(error.message || 'Failed to send message.');
+    }
+  };
+
+  useEffect(() => {
+    if (view !== 'connect' || !token) {
+      return;
+    }
+
+    loadConnectData();
+    const intervalId = window.setInterval(() => {
+      loadConnectData();
+    }, 8000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [view, token]);
+
   const getCourseHeader = (section) => {
     const course = section?.course_details?.[0];
     if (!course) return section.section_number || 'Section';
@@ -467,17 +604,23 @@ export default function App() {
                 <h1>PearedUp</h1>
               </div>
             </div>
-            <button
-              className="ghost-btn"
-              onClick={() => {
-                localStorage.removeItem('token');
-                setToken(null);
-                setUser(null);
-                switchView('home');
-              }}
-            >
-              Logout
-            </button>
+            <div className="dashboard-top-right">
+              <div className="dashboard-status-card">
+                <p><strong>Status:</strong> {dashboardDetectionStatus === 'detected' ? 'Class Detected' : 'Awaiting Syllabus'}</p>
+                <p><strong>Class:</strong> {dashboardDetectedClass}</p>
+              </div>
+              <button
+                className="ghost-btn"
+                onClick={() => {
+                  localStorage.removeItem('token');
+                  setToken(null);
+                  setUser(null);
+                  switchView('home');
+                }}
+              >
+                Logout
+              </button>
+            </div>
           </nav>
         </header>
         <main className="welcome-main">
@@ -499,7 +642,7 @@ export default function App() {
             <div className="dashboard-orb" aria-hidden="true"></div>
             <button
               className="feature-btn pos-top tone-mint"
-              onClick={() => alert('Connect feature coming soon!')}
+              onClick={() => switchView('connect')}
             >
               <div className="btn-icon">🤝</div>
               <h3>Connect</h3>
@@ -507,7 +650,7 @@ export default function App() {
             </button>
             <button
               className="feature-btn pos-right tone-amber"
-              onClick={() => alert('Syllabus uploader coming soon!')}
+              onClick={() => switchView('syllabus')}
             >
               <div className="btn-icon">📄</div>
               <h3>Syllabus PDF Uploader</h3>
@@ -645,6 +788,158 @@ export default function App() {
                 </button>
               </div>
             </div>
+          </section>
+        </main>
+      </div>
+    );
+  }
+
+  if (view === 'connect') {
+    return (
+      <div className={shellClass}>
+        <header className="hero">
+          <nav className="top-nav">
+            <div className="brand">
+              <img src={logo} alt="PearedUp logo" className="logo-img" />
+              <div>
+                <h1>PearedUp</h1>
+              </div>
+            </div>
+            <button className="ghost-btn" onClick={() => switchView('student-welcome')}>
+              Back
+            </button>
+          </nav>
+        </header>
+
+        <main className="connect-main">
+          <section className="panel connect-card">
+            <p className="eyebrow">Class Connect</p>
+            <h2>People In Your Class</h2>
+            <p className="muted">Detected class: <strong>{dashboardDetectedClass}</strong></p>
+
+            {connectError && <p className="connect-error">{connectError}</p>}
+
+            <div className="connect-layout">
+              <aside className="connect-classmates">
+                <h3>Classmates</h3>
+                {connectLoading ? (
+                  <p className="muted">Loading classmates...</p>
+                ) : connectClassmates.length === 0 ? (
+                  <p className="muted">No classmates found yet for this class.</p>
+                ) : (
+                  <ul>
+                    {connectClassmates.map((mate) => (
+                      <li key={mate._id || mate.email}>
+                        <span>{mate.email}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </aside>
+
+              <section className="connect-chat">
+                <h3>Class Chat</h3>
+                <div className="connect-messages">
+                  {connectMessages.length === 0 ? (
+                    <p className="muted">No messages yet. Start the conversation.</p>
+                  ) : (
+                    connectMessages.map((item) => (
+                      <article key={item._id} className={`connect-message ${item.senderId === user?._id ? 'mine' : ''}`}>
+                        <p className="connect-message-meta">{item.senderEmail || 'Student'}</p>
+                        <p>{item.text}</p>
+                      </article>
+                    ))
+                  )}
+                </div>
+
+                <div className="connect-input-row">
+                  <input
+                    type="text"
+                    placeholder="Send a message to your class..."
+                    value={connectInput}
+                    onChange={(event) => setConnectInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        sendConnectMessage();
+                      }
+                    }}
+                  />
+                  <button className="primary-btn" onClick={sendConnectMessage} disabled={!connectInput.trim()}>
+                    Send
+                  </button>
+                </div>
+              </section>
+            </div>
+          </section>
+        </main>
+      </div>
+    );
+  }
+
+  if (view === 'syllabus') {
+    return (
+      <div className={shellClass}>
+        <header className="hero">
+          <nav className="top-nav">
+            <div className="brand">
+              <img src={logo} alt="PearedUp logo" className="logo-img" />
+              <div>
+                <h1>PearedUp</h1>
+              </div>
+            </div>
+            <button className="ghost-btn" onClick={() => switchView('student-welcome')}>
+              Back
+            </button>
+          </nav>
+        </header>
+
+        <main className="syllabus-main">
+          <section className="panel syllabus-card">
+            <p className="eyebrow">Syllabus Foundation</p>
+            <h2>Set Up Class Detection</h2>
+            <p className="muted">Add your course title and syllabus text. We will detect the class and show it on your dashboard.</p>
+
+            <div className="syllabus-grid">
+              <label>
+                Course Title
+                <input
+                  type="text"
+                  placeholder="CS 1337 - Computer Science I"
+                  value={syllabusCourseTitle}
+                  onChange={(event) => setSyllabusCourseTitle(event.target.value)}
+                />
+              </label>
+              <label>
+                Instructor
+                <input
+                  type="text"
+                  placeholder="Professor name"
+                  value={syllabusInstructor}
+                  onChange={(event) => setSyllabusInstructor(event.target.value)}
+                />
+              </label>
+            </div>
+
+            <label className="syllabus-text-label">
+              Syllabus Text
+              <textarea
+                rows={10}
+                placeholder="Paste syllabus highlights, topics, and schedule here..."
+                value={syllabusText}
+                onChange={(event) => setSyllabusText(event.target.value)}
+              />
+            </label>
+
+            <div className="syllabus-row">
+              <span className={`syllabus-badge ${syllabusDetectionStatus}`}>
+                {syllabusDetectionStatus === 'detected' ? `Detected: ${syllabusDetectedClass}` : 'No class detected yet'}
+              </span>
+              <button className="primary-btn" onClick={saveSyllabusFoundation} disabled={syllabusLoading}>
+                {syllabusLoading ? 'Saving...' : 'Save Syllabus'}
+              </button>
+            </div>
+
+            {syllabusMessage && <p className="syllabus-message">{syllabusMessage}</p>}
           </section>
         </main>
       </div>

@@ -29,6 +29,18 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ['student', 'non-student'],
       default: undefined
+    },
+    syllabusFoundation: {
+      courseTitle: { type: String, default: '' },
+      instructor: { type: String, default: '' },
+      rawText: { type: String, default: '' },
+      detectedClass: { type: String, default: '' },
+      detectionStatus: {
+        type: String,
+        enum: ['not-started', 'detected'],
+        default: 'not-started'
+      },
+      lastUpdatedAt: { type: Date, default: null }
     }
   },
   { timestamps: true }
