@@ -14,6 +14,20 @@ const heroContent = {
   heroBody:
     'Match by coursework and shared deadlines, train with an AI mentor, and earn smart-score points you can spend on cosmetics.'
 };
+
+const CAMPUS_SNAPSHOT = {
+  trendingClasses: [
+    { code: 'CS 1337', vibe: 'High' },
+    { code: 'MATH 2413', vibe: 'Steady' },
+    { code: 'PHYS 2325', vibe: 'Rising' }
+  ],
+  studyTimes: ['Mon 7-9pm', 'Tue 5-7pm', 'Wed 8-10pm', 'Thu 6-8pm'],
+  galaPrompts: [
+    'Quiz me on cell respiration with 5 short questions.',
+    'Make me a 3-day exam cram schedule for calculus.',
+    'Summarize chapter notes into flashcards.'
+  ]
+};
 const PEAR_CUT_FORCE_MS = 1900;
 const PAGE_TRANSITION_MS = 300;
 const DASHBOARD_CUT_MS = 820;
@@ -58,6 +72,7 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
+  const [firstNameInput, setFirstNameInput] = useState('');
   const [message, setMessage] = useState('');
   const [pearAngle, setPearAngle] = useState(0);
   const [chatInput, setChatInput] = useState('');
@@ -120,7 +135,7 @@ export default function App() {
         .then(data => {
           if (data.user) {
             setUser(data.user);
-            if (!data.user.userType) {
+            if (!data.user.firstName) {
               setView('user-type');
             } else {
               setView('student-welcome');
@@ -358,11 +373,11 @@ export default function App() {
       setMessage(data.message || (authMode === 'login' ? 'Login successful.' : 'Account created.'));
       if (authMode === 'login' && data.token) {
         localStorage.setItem('token', data.token);
-        const userFromResponse = data.user || { email, userType: data.userType };
-        const userType = userFromResponse?.userType;
+        const userFromResponse = data.user || { email, firstName: data.firstName, userType: data.userType };
+        const firstName = userFromResponse?.firstName;
         setToken(data.token);
         setUser(userFromResponse);
-        if (!userType) {
+        if (!firstName) {
           switchView('user-type');
         } else {
           switchView('student-welcome');
@@ -376,10 +391,17 @@ export default function App() {
     }
   };
 
-  const handleSetUserType = async (type) => {
+  const handleSetFirstName = async () => {
+    const normalizedName = firstNameInput.trim();
+    if (!normalizedName) {
+      setMessage('Please enter your first name.');
+      return;
+    }
+
     try {
-      const data = await postJson('/api/auth/set-user-type', { userType: type }, { Authorization: `Bearer ${token}` });
-      setUser((previous) => ({ ...previous, ...(data.user || {}), userType: type }));
+      const data = await postJson('/api/auth/set-first-name', { firstName: normalizedName }, { Authorization: `Bearer ${token}` });
+      setUser((previous) => ({ ...previous, ...(data.user || {}), firstName: normalizedName }));
+      setFirstNameInput('');
       switchView('student-welcome');
     } catch (error) {
       setMessage(error.message);
@@ -394,6 +416,7 @@ export default function App() {
     setPassword('');
     setConfirmPassword('');
     setVerificationCode('');
+    setFirstNameInput('');
     resetAuthFeedback();
   };
 
@@ -837,11 +860,26 @@ export default function App() {
         <main className="auth-page">
           <section className="panel auth-card user-type-card">
             <p className="eyebrow">Welcome!</p>
-            <h2>Are you a student?</h2>
-            <p className="muted">This helps us personalize your experience.</p>
+            <h2>What should we call you?</h2>
+            <p className="muted">Tell us your first name so we can personalize your dashboard.</p>
+            <div className="auth-form wide">
+              <input
+                type="text"
+                value={firstNameInput}
+                onChange={(event) => setFirstNameInput(event.target.value)}
+                placeholder="First name"
+                autoComplete="given-name"
+                maxLength={40}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    handleSetFirstName();
+                  }
+                }}
+              />
+            </div>
             <div className="cta-row centered">
-              <button className="primary-btn" onClick={() => handleSetUserType('student')}>
-                Student
+              <button className="primary-btn" onClick={handleSetFirstName}>
+                Continue
               </button>
             </div>
           </section>
@@ -877,7 +915,7 @@ export default function App() {
           <img src={cometPear} alt="" aria-hidden="true" className="welcome-bg-comet welcome-bg-comet-right" />
           <section className="dashboard-hero">
             <p className="eyebrow">Student Dashboard</p>
-            <h2>Welcome back, {user?.email ? user.email.split('@')[0] : 'Student'}!</h2>
+            <h2>Welcome back, {user?.firstName || (user?.email ? user.email.split('@')[0] : 'Student')}!</h2>
             <p>Pick a lane and keep your momentum going.</p>
             <div className="dashboard-meta">
               <span className="meta-chip">Focus Mode: Active</span>
@@ -1668,6 +1706,45 @@ export default function App() {
               </button>
             </div>
           </section>
+
+          <aside className="home-snapshot-card" aria-label="Live Campus Snapshot preview">
+            <p className="eyebrow">Live Campus Snapshot</p>
+            <h3>See what students are doing now</h3>
+
+            <div className="snapshot-block">
+              <p className="snapshot-label">Trending Classes This Week</p>
+              <div className="snapshot-chip-row">
+                {CAMPUS_SNAPSHOT.trendingClasses.map((item) => (
+                  <span key={item.code} className="snapshot-chip">
+                    <strong>{item.code}</strong> {item.vibe}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="snapshot-block">
+              <p className="snapshot-label">Popular Study Times</p>
+              <div className="study-time-row">
+                {CAMPUS_SNAPSHOT.studyTimes.map((time) => (
+                  <span key={time} className="time-pill">{time}</span>
+                ))}
+              </div>
+            </div>
+
+            <div className="snapshot-block">
+              <p className="snapshot-label">Recent Gala Prompts</p>
+              <ul className="prompt-list">
+                {CAMPUS_SNAPSHOT.galaPrompts.map((prompt) => (
+                  <li key={prompt}>{prompt}</li>
+                ))}
+              </ul>
+            </div>
+
+            <p className="snapshot-proof">1,200+ UTD students matched this semester.</p>
+            <button className="primary-btn wide" onClick={enterWithPearCut} disabled={isPearCutting}>
+              Join and Find Your Classmates
+            </button>
+          </aside>
         </div>
       </header>
 

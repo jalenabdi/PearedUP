@@ -25,10 +25,14 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: undefined
     },
+    firstName: {
+      type: String,
+      default: ''
+    },
     userType: {
       type: String,
       enum: ['student', 'non-student'],
-      default: undefined
+      default: 'student'
     },
     major: {
       type: String,

@@ -76,6 +76,10 @@ const optionalAuthenticate = (req, _res, next) => {
 
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 const isUtdEmail = (email) => String(email || '').toLowerCase().endsWith('@utdallas.edu');
+const normalizeFirstName = (value) => String(value || '')
+  .trim()
+  .replace(/\s+/g, ' ')
+  .slice(0, 40);
 const hashCode = (code) => crypto.createHash('sha256').update(code).digest('hex');
 const createVerificationCode = () => String(Math.floor(100000 + Math.random() * 900000));
 
@@ -661,25 +665,50 @@ app.post('/api/auth/login', async (req, res) => {
 
     const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
 
-    return res.json({ message: 'Login successful.', token, userType: user.userType });
+    return res.json({
+      message: 'Login successful.',
+      token,
+      user: {
+        email: user.email,
+        firstName: user.firstName || '',
+        userType: user.userType,
+        major: user.major || '',
+        syllabusFoundation: user.syllabusFoundation
+      }
+    });
   } catch {
     return res.status(500).json({ message: 'Failed to log in.' });
   }
 });
 
-app.post('/api/auth/set-user-type', authenticate, async (req, res) => {
+app.post('/api/auth/set-first-name', authenticate, async (req, res) => {
   try {
-    const userType = req.body.userType;
-    if (!['student', 'non-student'].includes(userType)) {
-      return res.status(400).json({ message: 'Invalid user type' });
+    const firstName = normalizeFirstName(req.body?.firstName);
+    if (!firstName) {
+      return res.status(400).json({ message: 'First name is required.' });
     }
+
     const user = await User.findById(req.userId);
-    if (!user) return res.status(404).json({ message: 'User not found' });
-    user.userType = userType;
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    user.firstName = firstName;
+    if (!user.userType) {
+      user.userType = 'student';
+    }
     await user.save();
-    return res.json({ message: 'User type set successfully' });
+
+    return res.json({
+      message: 'First name saved.',
+      user: {
+        email: user.email,
+        firstName: user.firstName,
+        userType: user.userType,
+        major: user.major || '',
+        syllabusFoundation: user.syllabusFoundation
+      }
+    });
   } catch {
-    return res.status(500).json({ message: 'Failed to set user type' });
+    return res.status(500).json({ message: 'Failed to save first name.' });
   }
 });
 
@@ -844,7 +873,7 @@ app.post('/api/auth/delete-account', authenticate, async (req, res) => {
 
 app.get('/api/auth/me', authenticate, async (req, res) => {
   try {
-    const user = await User.findById(req.userId).select('email userType major syllabusFoundation');
+    const user = await User.findById(req.userId).select('email firstName userType major syllabusFoundation');
     if (!user) return res.status(404).json({ message: 'User not found' });
     return res.json({ user });
   } catch {
