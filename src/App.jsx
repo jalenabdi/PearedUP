@@ -273,6 +273,7 @@ export default function App() {
   const dashboardDetectionStatus = user?.syllabusFoundation?.detectionStatus || syllabusDetectionStatus;
 
   const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+  const isUtdEmail = (value) => String(value || '').trim().toLowerCase().endsWith('@utdallas.edu');
 
   const resetAuthFeedback = () => {
     setMessage('');
@@ -281,6 +282,10 @@ export default function App() {
   const sendVerificationCode = async () => {
     if (!isValidEmail(email)) {
       setMessage('Enter a valid email first so we can verify it.');
+      return;
+    }
+    if (!isUtdEmail(email)) {
+      setMessage('Only @utdallas.edu emails can sign up.');
       return;
     }
 
@@ -327,6 +332,10 @@ export default function App() {
     }
 
     if (authMode === 'signup') {
+      if (!isUtdEmail(email)) {
+        setMessage('Only @utdallas.edu emails can sign up.');
+        return;
+      }
       if (password.length < 8) {
         setMessage('Password must be at least 8 characters.');
         return;

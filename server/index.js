@@ -75,6 +75,7 @@ const optionalAuthenticate = (req, _res, next) => {
 };
 
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+const isUtdEmail = (email) => String(email || '').toLowerCase().endsWith('@utdallas.edu');
 const hashCode = (code) => crypto.createHash('sha256').update(code).digest('hex');
 const createVerificationCode = () => String(Math.floor(100000 + Math.random() * 900000));
 
@@ -541,6 +542,9 @@ app.post('/api/auth/request-verification', async (req, res) => {
     if (!isValidEmail(email)) {
       return res.status(400).json({ message: 'Enter a valid email address.' });
     }
+    if (!isUtdEmail(email)) {
+      return res.status(400).json({ message: 'Only @utdallas.edu emails can sign up.' });
+    }
 
     const code = createVerificationCode();
     const verificationCodeHash = hashCode(code);
@@ -608,6 +612,9 @@ app.post('/api/auth/signup', async (req, res) => {
 
     if (!isValidEmail(email)) {
       return res.status(400).json({ message: 'Enter a valid email address.' });
+    }
+    if (!isUtdEmail(email)) {
+      return res.status(400).json({ message: 'Only @utdallas.edu emails can sign up.' });
     }
 
     if (password.length < 8) {
@@ -842,6 +849,20 @@ app.get('/api/auth/me', authenticate, async (req, res) => {
     return res.json({ user });
   } catch {
     return res.status(500).json({ message: 'Failed to get user' });
+  }
+});
+
+app.delete('/api/auth/delete-account', authenticate, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId).select('_id');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    await ClassMessage.deleteMany({ senderId: user._id });
+    await User.findByIdAndDelete(user._id);
+
+    return res.json({ message: 'Account deleted successfully.' });
+  } catch {
+    return res.status(500).json({ message: 'Failed to delete account.' });
   }
 });
 
